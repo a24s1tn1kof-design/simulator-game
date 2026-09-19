@@ -357,3 +357,175 @@ body { background: #0d1117; color: #c9d1d9; font-size: 15px;
 }
 .admin-panel .a-error { color: #f85149; font-size: 12px; text-align: center; margin-top: 6px; }
 .admin-panel .a-hint { color: #cc9999; font-size: 12px; margin: 8px 0; }
+/* МАГАЗИН */
+.shop-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.shop-card {
+  background: #0d1117; border: 1px solid #30363d;
+  border-left: 3px solid #1f6feb; border-radius: 8px;
+  padding: 12px; display: flex; align-items: center; gap: 12px;
+}
+.shop-card .sc-icon { font-size: 32px; width: 44px; text-align: center; flex-shrink: 0; }
+.shop-card .sc-info { flex: 1; min-width: 0; }
+.shop-card .sc-name { color: #f0f6fc; font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.shop-card .sc-desc { color: #8b949e; font-size: 12px; margin-bottom: 4px; }
+.shop-card .sc-price { color: #d29922; font-weight: 700; font-size: 13px; }
+.shop-card .sc-buy {
+  padding: 8px 12px; background: #238636; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.shop-card .sc-buy:active { transform: scale(.96); background: #2ea043; }
+.shop-card .sc-buy.disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+
+.inventory-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.inventory-item {
+  background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+  padding: 10px; text-align: center;
+}
+.inventory-item .inv-icon { font-size: 24px; margin-bottom: 4px; }
+.inventory-item .inv-name { color: #c9d1d9; font-size: 12px; margin-bottom: 3px; }
+.inventory-item .inv-count { color: #58a6ff; font-weight: 700; font-size: 14px; }
+
+/* ТРАНСПОРТ */
+.transport-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.transport-card {
+  background: #0d1117; border: 1px solid #30363d;
+  border-left: 3px solid #d29922; border-radius: 8px;
+  padding: 12px; display: flex; align-items: center; gap: 12px;
+}
+.transport-card.owned { border-left-color: #238636; background: #23863611; }
+.transport-card .tc-icon { font-size: 36px; width: 48px; text-align: center; flex-shrink: 0; }
+.transport-card .tc-info { flex: 1; min-width: 0; }
+.transport-card .tc-name { color: #f0f6fc; font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.transport-card .tc-desc { color: #8b949e; font-size: 12px; margin-bottom: 4px; }
+.transport-card .tc-stats { color: #58a6ff; font-size: 11px; margin-bottom: 4px; }
+.transport-card .tc-price { color: #d29922; font-weight: 700; font-size: 13px; }
+.transport-card .tc-buy {
+  padding: 8px 12px; background: #238636; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.transport-card .tc-buy:active { transform: scale(.96); }
+.transport-card .tc-buy.disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+.transport-card .tc-buy.owned { background: #1f6feb; cursor: default; }
+
+/* СМИ */
+.smi-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.smi-card {
+  background: #0d1117; border: 1px solid #30363d;
+  border-radius: 8px; padding: 12px;
+  border-left: 3px solid #58a6ff;
+}
+.smi-card.positive { border-left-color: #3fb950; }
+.smi-card.negative { border-left-color: #f85149; }
+.smi-card .smi-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px; font-size: 11px; color: #8b949e;
+}
+.smi-card .smi-title { color: #f0f6fc; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.smi-card .smi-text { color: #c9d1d9; font-size: 12px; line-height: 1.5; }
+.smi-card .smi-effect { margin-top: 6px; font-size: 11px; font-weight: 600; }
+.smi-card.positive .smi-effect { color: #3fb950; }
+.smi-card.negative .smi-effect { color: #f85149; }
+
+/* ВЗЯТКА */
+.bribe-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.85);
+  z-index: 990; display: flex; align-items: center; justify-content: center;
+  padding: 20px 10px;
+}
+.bribe-panel {
+  background: #1a1a0f; border: 2px solid #d29922;
+  border-radius: 12px; width: 100%; max-width: 400px;
+  padding: 20px; box-shadow: 0 10px 40px rgba(210,153,34,.4);
+}
+.bribe-panel h2 {
+  color: #d29922; font-size: 18px; text-align: center;
+  border-bottom: 2px solid #d29922; padding-bottom: 10px;
+  margin-bottom: 14px; letter-spacing: 2px;
+}
+.bribe-panel .b-text {
+  color: #ffdd99; font-size: 14px; line-height: 1.6;
+  margin-bottom: 14px; text-align: center;
+}
+.bribe-panel .b-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bribe-panel .b-btn {
+  padding: 12px; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 700; font-size: 13px;
+}
+.bribe-panel .b-btn.accept { background: #d29922; color: #000; }
+.bribe-panel .b-btn.reject { background: #30363d; color: #c9d1d9; }
+.bribe-panel .b-btn:active { transform: scale(.97); }
+
+/* КАРТОЧКА ОРГАНИЗАЦИИ */
+.org-info-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.8);
+  z-index: 950; display: flex; align-items: flex-start; justify-content: center;
+  padding: 20px 10px; overflow-y: auto;
+}
+.org-info-panel {
+  background: #161b22; border: 2px solid #58a6ff;
+  border-radius: 12px; width: 100%; max-width: 500px;
+  padding: 20px; box-shadow: 0 10px 40px rgba(88,166,255,.3);
+}
+.org-info-panel h2 {
+  color: #58a6ff; font-size: 20px; text-align: center;
+  border-bottom: 2px solid #1f6feb; padding-bottom: 10px;
+  margin-bottom: 14px; letter-spacing: 1px;
+}
+.org-info-panel .oi-row {
+  display: flex; justify-content: space-between; padding: 6px 0;
+  font-size: 13px; border-bottom: 1px dotted #30363d; gap: 8px;
+}
+.org-info-panel .oi-row span { color: #8b949e; }
+.org-info-panel .oi-row b { color: #f0f6fc; text-align: right; }
+.org-info-panel .oi-text {
+  color: #c9d1d9; font-size: 13px; line-height: 1.6;
+  margin: 10px 0; padding: 10px;
+  background: #0d1117; border-radius: 6px;
+  border-left: 3px solid #1f6feb;
+}
+.org-info-panel .oi-close {
+  width: 100%; padding: 12px;
+  background: #1f6feb; color: #fff; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 700; font-size: 14px;
+  margin-top: 12px; letter-spacing: 1px;
+}
+
+/* ЭКИПИРОВКА ПЕРЕД ОПЕРАЦИЕЙ */
+.equip-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.85);
+  z-index: 980; display: flex; align-items: flex-start; justify-content: center;
+  padding: 20px 10px; overflow-y: auto;
+}
+.equip-panel {
+  background: #161b22; border: 2px solid #1f6feb;
+  border-radius: 12px; width: 100%; max-width: 500px;
+  padding: 20px; box-shadow: 0 10px 40px rgba(31,111,235,.4);
+}
+.equip-panel h2 {
+  color: #58a6ff; font-size: 18px; text-align: center;
+  border-bottom: 2px solid #1f6feb; padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+.equip-panel .eq-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; margin-bottom: 6px;
+  background: #0d1117; border: 1px solid #30363d;
+  border-radius: 6px;
+}
+.equip-panel .eq-item input { width: 18px; height: 18px; accent-color: #238636; cursor: pointer; }
+.equip-panel .eq-icon { font-size: 22px; width: 32px; text-align: center; }
+.equip-panel .eq-info { flex: 1; }
+.equip-panel .eq-name { color: #f0f6fc; font-weight: 600; font-size: 13px; }
+.equip-panel .eq-count { color: #8b949e; font-size: 11px; }
+.equip-panel .eq-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-top: 14px;
+}
+.equip-panel .eq-btn {
+  padding: 12px; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 700; font-size: 13px;
+}
+.equip-panel .eq-btn.go { background: #238636; color: #fff; }
+.equip-panel .eq-btn.cancel { background: #30363d; color: #c9d1d9; }
