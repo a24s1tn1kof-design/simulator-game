@@ -20,7 +20,7 @@
       <ul>
         <li>✅ Прослушка и дроны</li>
         <li>⚠️ Жёсткий отбор</li>
-        <li>🎯 Шпионы, ячейки</li>
+        <li>🎯 Шпионы, ячейки, теракты</li>
       </ul>
     </div>
     <div class="org-card" onclick="Game.chooseOrg('MVD')">
@@ -30,18 +30,14 @@
       <ul>
         <li>✅ Больше бюджета</li>
         <li>⚠️ Бюрократия</li>
-        <li>🎯 Облавы, оцепления</li>
+        <li>🎯 Угоны, кражи, облавы</li>
       </ul>
     </div>
-  </div>
-  <div id="load-slot" class="load-slot" style="display:none">
-    <button class="btn primary" onclick="Game.loadGame()">💾 Продолжить</button>
   </div>
 </div>
 
 <!-- ЭКРАН ОРГАНИЗАЦИИ -->
 <div id="screen-office" class="screen">
-
   <header class="topbar">
     <div class="topbar-left">
       <span id="org-name">—</span>
@@ -61,6 +57,7 @@
     <button class="tab" data-tab="hospital">🏥 Больничный</button>
     <button class="tab" data-tab="groups">🎯 Группы</button>
     <button class="tab" data-tab="ops">🚨 Операции</button>
+    <button class="tab" data-tab="archive">📦 Архив</button>
     <button class="tab" data-tab="wanted">🔍 Розыск</button>
     <button class="tab" data-tab="log">📜 Журнал</button>
   </nav>
@@ -70,10 +67,9 @@
     <div class="panel" id="candidates-panel">
       <div class="panel-header">
         <h2>📋 Кандидаты (<span id="candidates-count">0</span>)</h2>
-        <button class="btn primary small" onclick="Game.generateCandidate()">📞 Вызвать</button>
       </div>
       <div id="candidates-list" class="candidates-list">
-        <p class="placeholder">Нажмите «Вызвать», чтобы пригласить кандидатов</p>
+        <p class="placeholder">Кандидаты приходят сами, ожидайте...</p>
       </div>
     </div>
 
@@ -82,7 +78,6 @@
         <h2 id="cand-detail-title">Кандидат</h2>
         <button class="btn small" onclick="Game.closeCandidate()">✖ Закрыть</button>
       </div>
-
       <div class="cand-profile">
         <div class="cand-photo" id="cand-photo">👨</div>
         <div class="cand-info">
@@ -90,18 +85,15 @@
           <div class="cand-sub" id="cand-sub">—</div>
         </div>
       </div>
-
       <div class="doc-buttons">
         <button class="doc-btn" onclick="Game.showDoc('passport')">📕 Паспорт</button>
         <button class="doc-btn" onclick="Game.showDoc('medical')">🩺 Медкарта</button>
         <button class="doc-btn" onclick="Game.showDoc('military')">🎖️ Военбилет</button>
         <button class="doc-btn" onclick="Game.showDoc('experience')">📜 Стаж</button>
       </div>
-
       <div id="doc-view" class="doc-view">
-        <p class="placeholder">Выберите документ для просмотра</p>
+        <p class="placeholder">Выберите документ</p>
       </div>
-
       <div class="cand-actions">
         <button class="btn success" onclick="Game.hireCurrent()">✅ Одобрено</button>
         <button class="btn danger" onclick="Game.rejectCurrent()">❌ Отказано</button>
@@ -137,7 +129,7 @@
     <div class="panel">
       <h2>➕ Создать группу</h2>
       <div class="group-form">
-        <input id="group-name" placeholder="Название (Альфа, Омега...)" maxlength="20">
+        <input id="group-name" placeholder="Название (Альфа...)" maxlength="20">
         <select id="group-icon">
           <option value="🦅">🦅 Альфа</option>
           <option value="🐺">🐺 Омега</option>
@@ -152,10 +144,9 @@
                oninput="Game.previewIcon(this.value)">
       </div>
       <div id="icon-preview" style="margin-top:8px"></div>
-
-      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Выберите состав группы:</h3>
+      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Состав:</h3>
       <div id="group-staff-picker" class="staff-picker">
-        <p class="placeholder">Нет доступных сотрудников</p>
+        <p class="placeholder">Нет сотрудников</p>
       </div>
       <button class="btn primary" style="margin-top:10px;width:100%" onclick="Game.createGroup()">➕ Создать группу</button>
     </div>
@@ -171,16 +162,12 @@
   <!-- ОПЕРАЦИИ -->
   <section id="tab-ops" class="tab-content">
     <div class="panel">
-      <div class="panel-header">
-        <h2>🚨 Поступившие вызовы</h2>
-        <button class="btn small" onclick="Game.generateEvent()">📡 Новый вызов</button>
-      </div>
+      <h2>🚨 Активные вызовы</h2>
       <div id="events-list" class="events-list">
-        <p class="placeholder">Пока тихо</p>
+        <p class="placeholder">Пока тихо...</p>
       </div>
     </div>
 
-    <!-- ОКНО ОПЕРАЦИИ -->
     <div class="panel" id="operation-detail" style="display:none">
       <div class="panel-header">
         <h2 id="op-title">Операция</h2>
@@ -189,6 +176,16 @@
       <div id="op-info" class="op-info"></div>
       <div id="op-log" class="op-log"></div>
       <div id="op-result" class="op-result" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- АРХИВ -->
+  <section id="tab-archive" class="tab-content">
+    <div class="panel">
+      <h2>📦 Архив успешных операций</h2>
+      <div id="archive-list" class="archive-list">
+        <p class="placeholder">Пусто</p>
+      </div>
     </div>
   </section>
 
@@ -214,11 +211,13 @@
         <button class="btn small" onclick="Game.closeWanted()">✖</button>
       </div>
       <div id="wanted-info" class="op-info"></div>
-
-      <h3 style="color:#f0f6fc;font-size:14px;margin:10px 0 8px 0">Кого отправить:</h3>
-      <div id="wanted-groups-picker" class="groups-picker">
-        <p class="placeholder">Нет доступных групп</p>
+      <h3 style="color:#f0f6fc;font-size:14px;margin:10px 0 8px 0">
+        Кого отправить (выберите сотрудников):
+      </h3>
+      <div id="wanted-staff-picker" class="staff-picker">
+        <p class="placeholder">Нет сотрудников</p>
       </div>
+      <button class="btn primary" style="margin-top:10px;width:100%" onclick="Game.sendWantedTeam()">🚔 Отправить</button>
     </div>
 
     <div class="panel">
@@ -240,7 +239,5 @@
 
 <script src="ranks.js"></script>
 <script src="game.js"></script>
-<script src="game2.js"></script>
-<script src="game3.js"></script>
 </body>
-                                                       </html>
+  </html>
