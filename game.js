@@ -2,14 +2,15 @@
 //  ПОЛКОВНИК — game.js — ЧАСТЬ 1/4
 // ============================================================
 
-const SAVE_KEY = 'polkovnik_save_v4';
-const SAVE_VERSION = 4;
+const SAVE_KEY = 'polkovnik_save_v5';
+const SAVE_VERSION = 5;
 const HEAL_PER_DAY = 15;
 const HEAL_COST = 10000;
 const MAX_REPRIMANDS = 3;
 const OP_STEP_MS = 60000;
-const EVENT_INTERVAL_MS = 90000;
-const CANDIDATE_INTERVAL_MS = 45000;
+const EVENT_INTERVAL_MS = 300000;    // 5 минут
+const CANDIDATE_INTERVAL_MS = 300000; // 10 минут (2 кандидата за раз)
+const ADMIN_PASSWORD = '1212';
 
 const State = {
   org: null, myRank: 'Полковник', myExp: 0, money: 100000, reputation: 50,
@@ -28,10 +29,11 @@ const CITIES = ['Москва','Санкт-Петербург','Казань','�
 const MISSIONS_FSB = ['Терроризм','Захват заложников','Шпионаж','Экстремистская ячейка','Госизмена','Кибератака','Контрабанда','Похищение дипломата','Взрыв','Захват автобуса'];
 const MISSIONS_MVD = ['Угон','Кража','Разбойное нападение','Убийство','Наркоторговля','Мошенничество','Хулиганство','Массовая драка','Похищение','Поджог','Вооружённое ограбление','Стрельба'];
 
-const STREETS = ['ул. Ленина','пр. Мира','ул. Гагарина','ул. Советская','пр. Победы','ул. Кирова','ул. Пушкина','ул. Чехова','ул. Гоголя','ул. Тверская','ул. Арбат','пр. Ленинградский','ул. Садовая','ул. Лесная'];
-const JOBS = ['Охрана','МВД','Армия','ЧОП','Без опыта','Служба безопасности','Водитель','Строитель','Студент','Курьер','Продавец','Инженер'];
-const MED_ISSUES = ['Гипертония','Астма','Сахарный диабет','Проблемы со зрением','Плоскостопие','Сколиоз','Аллергия','Мигрень'];
+// Работа до поступления
+const PRIOR_JOBS = ['Армия', 'МВД'];
 const HOTSPOT_LABELS = ['Чечня','Дагестан','Сирия','Афганистан','Таджикистан'];
+const MED_ISSUES = ['Гипертония','Астма','Сахарный диабет','Проблемы со зрением','Плоскостопие','Сколиоз','Аллергия','Мигрень'];
+const STREETS = ['ул. Ленина','пр. Мира','ул. Гагарина','ул. Советская','пр. Победы','ул. Кирова','ул. Пушкина','ул. Чехова','ул. Гоголя','ул. Тверская','ул. Арбат','пр. Ленинградский','ул. Садовая','ул. Лесная'];
 
 const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -119,12 +121,15 @@ const Game = {
     if (State._eventTimer) clearInterval(State._eventTimer);
     if (State._candTimer) clearInterval(State._candTimer);
 
-    setTimeout(() => this.generateEvent(), 20000);
-    setTimeout(() => this.generateCandidate(), 10000);
+    setTimeout(() => this.generateEvent(), 30000);
+    setTimeout(() => { this.generateCandidate(); this.generateCandidate(); }, 15000);
 
     State._eventTimer = setInterval(() => this.generateEvent(), EVENT_INTERVAL_MS);
     State._candTimer = setInterval(() => {
-      if (State.candidates.length < 6) this.generateCandidate();
+      if (State.candidates.length < 6) {
+        this.generateCandidate();
+        this.generateCandidate();
+      }
     }, CANDIDATE_INTERVAL_MS);
   },
 
@@ -169,7 +174,7 @@ const Game = {
     const age = rndInt(21, 45);
     const hasCriminal = chance(0.15);
     const hasHealth = chance(0.2);
-    const served = chance(0.7);
+    const served = chance(0.95); // почти все служили
 
     const cand = {
       id: State.nextStaffId++,
@@ -177,8 +182,8 @@ const Game = {
       phone: genPhone(),
       passport: { number: genPassportNumber(), city: rnd(CITIES), criminal: hasCriminal, debts: chance(0.25) },
       medical: { healthy: !hasHealth, issue: hasHealth ? rnd(MED_ISSUES) : 'Здоров', psych: rndInt(60, 100) },
-      military: { served, category: served ? rnd(['А','Б','В']) : '—', hotSpots: served && chance(0.2), hotspot: served ? rnd(HOTSPOT_LABELS) : '—' },
-      experience: { years: rndInt(0, 15), lastJob: rnd(JOBS), fired: chance(0.2) },
+      military: { served: true, category: rnd(['А','Б','В']), hotSpots: chance(0.3), hotspot: rnd(HOTSPOT_LABELS) },
+      experience: { years: rndInt(3, 20), lastJob: rnd(PRIOR_JOBS), fired: chance(0.15) },
       skills: { loyalty: rndInt(40,95), corruption: rndInt(0,40), bravery: rndInt(30,95), intellect: rndInt(40,95), stamina: rndInt(50,95) },
       rank: State.org === 'FSB' ? 'Прапорщик' : 'Рядовой',
       exp: 0, health: 100, fatigue: 0,
@@ -189,7 +194,7 @@ const Game = {
     };
 
     State.candidates.push(cand);
-    this.log(`📞 Пришёл кандидат: ${cand.name}`, 'info');
+    this.log(`📞 Пришёл кандидат: ${cand.name} (${cand.experience.lastJob})`, 'info');
     this.toast(`Кандидат: ${cand.name}`, 'info');
     this.renderCandidates();
     this.autoSave();
@@ -259,14 +264,14 @@ const Game = {
     } else if (type === 'military') {
       v.innerHTML = `
         <div class="doc-title">🎖️ Военбилет</div>
-        <div class="doc-row"><span>Служба:</span><b class="${c.military.served ? 'doc-good' : 'doc-bad'}">${c.military.served ? 'Проходил' : 'Не проходил'}</b></div>
+        <div class="doc-row"><span>Служба:</span><b class="doc-good">Проходил</b></div>
         <div class="doc-row"><span>Категория:</span><b>${c.military.category}</b></div>
         <div class="doc-row"><span>Горячие точки:</span><b class="${c.military.hotSpots ? 'doc-warn' : ''}">${c.military.hotSpots ? 'Да (' + c.military.hotspot + ')' : 'Нет'}</b></div>`;
     } else if (type === 'experience') {
       v.innerHTML = `
         <div class="doc-title">📜 Стаж</div>
         <div class="doc-row"><span>Лет:</span><b>${c.experience.years}</b></div>
-        <div class="doc-row"><span>Последнее:</span><b>${c.experience.lastJob}</b></div>
+        <div class="doc-row"><span>Прошлое место:</span><b>${c.experience.lastJob}</b></div>
         <div class="doc-row"><span>Уволен по статье:</span><b class="${c.experience.fired ? 'doc-bad' : 'doc-good'}">${c.experience.fired ? 'Да' : 'Нет'}</b></div>`;
     }
   },
@@ -304,6 +309,21 @@ const Game = {
 Object.assign(Game, {
 
   findStaff(id) { return State.staff.find(s => s.id === id); },
+
+  // Проверка: находится ли сотрудник в группе
+  isInGroup(staffId) {
+    return State.groups.some(g => g.members.includes(staffId));
+  },
+
+  // Получить ранг сотрудника по имени
+  getRankIndex(rankName) {
+    return RANKS[State.org].findIndex(r => r.name === rankName);
+  },
+
+  // Мой ранг (индекс)
+  getMyRankIndex() {
+    return this.getRankIndex(State.myRank);
+  },
 
   renderStaff() {
     const list = document.getElementById('staff-list');
@@ -413,13 +433,21 @@ Object.assign(Game, {
     if (o) o.remove();
   },
 
+  // ПОВЫШЕНИЕ С ОГРАНИЧЕНИЕМ "не выше меня"
   promote(id) {
     const s = this.findStaff(id);
     if (!s) return;
     const list = RANKS[State.org];
     const idx = list.findIndex(r => r.name === s.rank);
     if (idx < 0) return;
-    if (idx >= list.length - 1) return this.toast(`${s.name} уже на максимуме`, 'warn');
+
+    const myIdx = this.getMyRankIndex();
+
+    // Нельзя повысить до своего ранга или выше
+    if (idx + 1 >= myIdx) {
+      return this.toast(`Нельзя выше ${list[myIdx - 1].name} (ваше звание: ${State.myRank})`, 'danger');
+    }
+
     const old = s.rank;
     s.rank = list[idx + 1].name;
     this.log(`⬆ ${s.name}: ${old} → ${s.rank}`, 'success');
@@ -544,25 +572,24 @@ Object.assign(Game, {
     this.autoSave();
   },
 
+  // ПИКЕР — только СВОБОДНЫЕ сотрудники
   renderStaffPicker() {
     const picker = document.getElementById('group-staff-picker');
     if (!picker) return;
-    const available = State.staff.filter(s => !s.wounded);
+    const available = State.staff.filter(s => !s.wounded && !this.isInGroup(s.id));
     if (available.length === 0) {
-      picker.innerHTML = '<p class="placeholder">Нет сотрудников</p>';
+      picker.innerHTML = '<p class="placeholder">Нет свободных сотрудников</p>';
       return;
     }
     picker.innerHTML = available.map(s => {
       const checked = State.selectedStaff.includes(s.id);
-      const inGroup = State.groups.find(g => g.members.includes(s.id));
-      const inGroupLabel = inGroup ? ` · в группе «${inGroup.name}»` : '';
       return `
         <label class="picker-item">
           <input type="checkbox" ${checked ? 'checked' : ''}
             onchange="Game.toggleStaffPick(${s.id}, this.checked)">
           <div class="pi-info">
             <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
-            <div class="pi-rank">${s.rank}${inGroupLabel}</div>
+            <div class="pi-rank">${s.rank} · свободен</div>
           </div>
         </label>`;
     }).join('');
@@ -632,7 +659,7 @@ Object.assign(Game, {
           <div class="g-info">👥 Готовы: ${alive.length} / ${members.length}</div>
           <div class="g-members">${members.map(s => `${s.wounded ? '🏥' : '•'} ${s.name}`).join('<br>')}</div>
           <div class="g-actions">
-            <button class="btn small primary" onclick="Game.addToGroup(${g.id})">➕ Добавить людей</button>
+            <button class="btn small primary" onclick="Game.addToGroup(${g.id})">➕ Добавить</button>
             <button class="btn small danger" onclick="Game.deleteGroup(${g.id})">Расформировать</button>
           </div>
         </div>`;
@@ -643,7 +670,9 @@ Object.assign(Game, {
   addToGroup(groupId) {
     const g = State.groups.find(x => x.id === groupId);
     if (!g) return;
-    const available = State.staff.filter(s => !s.wounded && !g.members.includes(s.id));
+    const available = State.staff.filter(s =>
+      !s.wounded && !g.members.includes(s.id) && !this.isInGroup(s.id)
+    );
     if (available.length === 0) return this.toast('Нет свободных сотрудников', 'warn');
 
     const overlay = document.createElement('div');
@@ -679,7 +708,9 @@ Object.assign(Game, {
   confirmAddToGroup(groupId) {
     const g = State.groups.find(x => x.id === groupId);
     if (!g) return;
-    const available = State.staff.filter(s => !s.wounded && !g.members.includes(s.id));
+    const available = State.staff.filter(s =>
+      !s.wounded && !g.members.includes(s.id) && !this.isInGroup(s.id)
+    );
     let added = 0;
     available.forEach(s => {
       const cb = document.getElementById('add-' + s.id);
@@ -714,7 +745,7 @@ Object.assign(Game, {
   generateEvent() {
     if (!State.org) return;
     const active = State.events.filter(e => e.status === 'pending');
-    if (active.length >= 5) return;
+    if (active.length >= 4) return;
 
     const missions = State.org === 'FSB' ? MISSIONS_FSB : MISSIONS_MVD;
     const type = rnd(missions);
@@ -1029,6 +1060,92 @@ Object.assign(Game, {
 
 Object.assign(Game, {
 
+  // АДМИН-ПАНЕЛЬ
+  openAdmin() {
+    const overlay = document.createElement('div');
+    overlay.className = 'admin-overlay';
+    overlay.id = 'admin-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) Game.closeAdmin(); };
+
+    overlay.innerHTML = `
+      <div class="admin-panel">
+        <h2>🟥 АДМИН ПАНЕЛЬ</h2>
+        <p class="a-hint">Введите пароль для доступа:</p>
+        <input type="password" id="admin-pass" placeholder="Пароль" maxlength="10">
+        <div id="admin-content" style="display:none">
+          <div class="a-row"><span>Режим:</span><b>Полный доступ</b></div>
+          <p class="a-hint" style="margin-top:12px">Выдать сотрудника:</p>
+          <input type="text" id="admin-name" placeholder="ФИО (оставь пустым = случайное)">
+          <select id="admin-rank"></select>
+          <button class="a-btn" onclick="Game.adminAddStaff()">➕ ВЫДАТЬ СОТРУДНИКА</button>
+        </div>
+        <div id="admin-error" class="a-error" style="display:none"></div>
+        <button class="a-btn" id="admin-login-btn" onclick="Game.adminLogin()">ВОЙТИ</button>
+        <button class="a-close" onclick="Game.closeAdmin()">ЗАКРЫТЬ</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  },
+
+  adminLogin() {
+    const pass = document.getElementById('admin-pass').value;
+    const err = document.getElementById('admin-error');
+    if (pass !== ADMIN_PASSWORD) {
+      err.style.display = 'block';
+      err.textContent = '❌ Неверный пароль';
+      return;
+    }
+    err.style.display = 'none';
+    document.getElementById('admin-content').style.display = 'block';
+    document.getElementById('admin-login-btn').style.display = 'none';
+    document.getElementById('admin-pass').style.display = 'none';
+    // заполнить ранг-селект
+    const sel = document.getElementById('admin-rank');
+    const myIdx = this.getMyRankIndex();
+    sel.innerHTML = RANKS[State.org].slice(0, myIdx).map(r =>
+      `<option value="${r.name}">${r.name}</option>`
+    ).join('');
+  },
+
+  adminAddStaff() {
+    const nameInp = document.getElementById('admin-name').value.trim();
+    const rank = document.getElementById('admin-rank').value;
+    if (!rank) return this.toast('Выберите звание', 'warn');
+
+    const gender = chance(0.9) ? 'М' : 'Ж';
+    const name = nameInp || fullName(gender);
+    const age = rndInt(21, 45);
+
+    const s = {
+      id: State.nextStaffId++,
+      gender, name, age,
+      phone: genPhone(),
+      passport: { number: genPassportNumber(), city: rnd(CITIES), criminal: false, debts: false },
+      medical: { healthy: true, issue: 'Здоров', psych: rndInt(70, 100) },
+      military: { served: true, category: 'А', hotSpots: false, hotspot: '—' },
+      experience: { years: rndInt(3, 15), lastJob: rnd(PRIOR_JOBS), fired: false },
+      skills: { loyalty: 90, corruption: 0, bravery: 80, intellect: 80, stamina: 80 },
+      rank: rank,
+      exp: 0, health: 100, fatigue: 0,
+      salary: rndInt(30000, 60000),
+      wounded: false, healDays: 0,
+      reprimands: 0,
+      hireDay: State.day
+    };
+    State.staff.push(s);
+    this.log(`🟥 [АДМИН] Выдан сотрудник: ${s.name} (${s.rank})`, 'success');
+    this.toast(`${s.name} выдан`, 'success');
+    this.closeAdmin();
+    this.renderStaff();
+    this.autoSave();
+  },
+
+  closeAdmin() {
+    const o = document.getElementById('admin-overlay');
+    if (o) o.remove();
+  },
+
+  // РОЗЫСК
   addWanted() {
     const name = document.getElementById('wanted-name').value.trim();
     const crime = document.getElementById('wanted-crime').value.trim();
