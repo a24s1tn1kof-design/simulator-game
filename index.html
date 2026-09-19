@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ПОЛКОВНИК — Симулятор ведомства</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -34,7 +35,7 @@
     </div>
   </div>
   <div id="load-slot" class="load-slot" style="display:none">
-    <button class="btn primary" onclick="Game.loadGame()">💾 Загрузить сохранение</button>
+    <button class="btn primary" onclick="Game.loadGame()">💾 Продолжить сохранённую игру</button>
   </div>
 </div>
 
@@ -51,13 +52,12 @@
       <span>📊 <b id="stat-exp">0</b></span>
       <span>👥 <b id="stat-staff">0</b></span>
       <span>🏥 <b id="stat-hospital">0</b></span>
-      <button class="btn small" onclick="Game.saveGame()">💾 Сохранить</button>
-      <button class="btn small danger" onclick="Game.resetGame()">🗑 Сброс</button>
+      <span>📅 <b id="stat-day">1</b></span>
     </div>
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="hr">👥 Отдел кадров</button>
+    <button class="tab active" data-tab="hr">👥 Кадры</button>
     <button class="tab" data-tab="hospital">🏥 Больничный</button>
     <button class="tab" data-tab="groups">🎯 Группы</button>
     <button class="tab" data-tab="ops">🚨 Операции</button>
@@ -70,12 +70,10 @@
     <div class="panel">
       <div class="panel-header">
         <h2>Собеседование</h2>
-        <button class="btn primary" onclick="Game.generateCandidate()">
-          📞 Вызвать следующего кандидата
-        </button>
+        <button class="btn primary" onclick="Game.generateCandidate()">📞 Вызвать кандидата</button>
       </div>
       <div id="candidate-card" class="candidate-card empty">
-        <p class="placeholder">Нажмите «Вызвать следующего кандидата», чтобы начать собеседование</p>
+        <p class="placeholder">Нажмите «Вызвать кандидата», чтобы начать собеседование</p>
       </div>
     </div>
     <div class="panel">
@@ -90,13 +88,10 @@
   <section id="tab-hospital" class="tab-content">
     <div class="panel">
       <h2>🏥 На больничном (<span id="hospital-count">0</span>)</h2>
-      <p class="placeholder" style="text-align:left;font-style:normal;color:#8b949e;padding:0 0 15px 0">
-        Раненые сотрудники не могут быть в группах и операциях, пока не восстановятся.
-        Лечение ускоряется за счёт бюджета.
-      </p>
+      <p class="hint">Раненые сотрудники не могут быть в группах, пока не восстановятся.</p>
       <div class="panel-header" style="margin-bottom:15px">
         <button class="btn" onclick="Game.healAllFast()">💊 Ускорить лечение (10 000₽ / чел.)</button>
-        <button class="btn" onclick="Game.nextDay()">⏭ Следующий день</button>
+        <button class="btn primary" onclick="Game.nextDay()">⏭ Следующий день</button>
       </div>
       <div id="hospital-list" class="staff-list">
         <p class="placeholder">Никто не ранен</p>
@@ -122,8 +117,8 @@
           <option value="🚁">🚁 Авиация</option>
           <option value="__custom">🖼️ Своя иконка (URL)</option>
         </select>
-        <input id="group-icon-url" placeholder="https://... или /img/icon.png"
-               style="display:none" oninput="Game.previewIcon(this.value)">
+        <input id="group-icon-url" placeholder="https://..." style="display:none"
+               oninput="Game.previewIcon(this.value)">
         <button class="btn primary" onclick="Game.createGroup()">➕ Создать</button>
       </div>
       <div id="icon-preview" style="margin-top:10px"></div>
@@ -183,5 +178,7 @@
 
 <script src="ranks.js"></script>
 <script src="game.js"></script>
+<script src="game2.js"></script>
+<script src="game3.js"></script>
 </body>
-        </html>
+                                                    </html>
