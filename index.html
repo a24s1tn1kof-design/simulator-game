@@ -38,7 +38,7 @@
 <div id="screen-office" class="screen">
   <header class="topbar">
     <div class="topbar-left">
-      <span id="org-name">—</span>
+      <span id="org-name" onclick="Game.showOrgInfo()" style="cursor:pointer">—</span>
       <span id="my-rank" class="rank-badge">Полковник</span>
     </div>
     <div class="topbar-right">
@@ -47,7 +47,7 @@
       <span title="Репутация">⭐ <b id="stat-rep">0</b></span>
       <span title="Сотрудники">👥 <b id="stat-staff">0</b></span>
       <span title="Раненые">🏥 <b id="stat-hospital">0</b></span>
-      <button class="btn-admin" onclick="Game.openAdmin()">🟥 Админ</button>
+      <button class="btn-admin" onclick="Game.openAdmin()">АДМИН</button>
     </div>
   </header>
 
@@ -56,6 +56,9 @@
     <button class="tab" data-tab="hospital">🏥 Больничный</button>
     <button class="tab" data-tab="groups">🎯 Группы</button>
     <button class="tab" data-tab="ops">🚨 Операции</button>
+    <button class="tab" data-tab="shop">🛒 Магазин</button>
+    <button class="tab" data-tab="transport">🚗 Транспорт</button>
+    <button class="tab" data-tab="smi">📰 СМИ</button>
     <button class="tab" data-tab="archive">📦 Архив</button>
     <button class="tab" data-tab="wanted">🔍 Розыск</button>
     <button class="tab" data-tab="log">📜 Журнал</button>
@@ -86,7 +89,7 @@
       <div class="doc-buttons">
         <button class="doc-btn" onclick="Game.showDoc('passport')">📕 Паспорт</button>
         <button class="doc-btn" onclick="Game.showDoc('medical')">🩺 Медкарта</button>
-        <button class="doc-btn" onclick="Game.showDoc('military')">🎖️ Военбилет</button>
+        <button class="doc-btn" onclick="Game.showDoc('military')">🎖️ Военный билет</button>
         <button class="doc-btn" onclick="Game.showDoc('experience')">📜 Стаж</button>
       </div>
       <div id="doc-view" class="doc-view">
@@ -115,6 +118,9 @@
           <button class="btn small primary" onclick="Game.nextDay()">⏭ День +1</button>
         </div>
       </div>
+      <p class="hint" style="color:#f85149;font-size:12px;margin-bottom:10px">
+        ⚠️ Тяжело раненые (HP &lt; 30) могут погибнуть, если не лечить их каждый день
+      </p>
       <div id="hospital-list" class="staff-list">
         <p class="placeholder">Никто не ранен</p>
       </div>
@@ -140,9 +146,9 @@
                oninput="Game.previewIcon(this.value)">
       </div>
       <div id="icon-preview" style="margin-top:8px"></div>
-      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Состав (свободные):</h3>
+      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Состав:</h3>
       <div id="group-staff-picker" class="staff-picker">
-        <p class="placeholder">Нет свободных сотрудников</p>
+        <p class="placeholder">Нет сотрудников</p>
       </div>
       <button class="btn primary" style="margin-top:10px;width:100%" onclick="Game.createGroup()">➕ Создать группу</button>
     </div>
@@ -171,6 +177,52 @@
       <div id="op-info" class="op-info"></div>
       <div id="op-log" class="op-log"></div>
       <div id="op-result" class="op-result" style="display:none"></div>
+    </div>
+  </section>
+
+  <section id="tab-shop" class="tab-content">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🛒 Магазин вооружения</h2>
+        <span style="color:#58a6ff;font-size:13px">💰 <b id="shop-money">0</b></span>
+      </div>
+      <div id="shop-list" class="shop-list">
+        <p class="placeholder">Загрузка...</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>📦 Склад</h2>
+      <div id="inventory-list" class="inventory-list">
+        <p class="placeholder">Пусто</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-transport" class="tab-content">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🚗 Транспорт</h2>
+        <span style="color:#58a6ff;font-size:13px">💰 <b id="transport-money">0</b></span>
+      </div>
+      <p class="hint">Транспорт влияет на скорость прибытия и успех операции</p>
+      <div id="transport-list" class="transport-list">
+        <p class="placeholder">Загрузка...</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>🚙 Мой автопарк</h2>
+      <div id="my-transport" class="inventory-list">
+        <p class="placeholder">Пусто</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-smi" class="tab-content">
+    <div class="panel">
+      <h2>📰 Пресса о вас</h2>
+      <div id="smi-list" class="smi-list">
+        <p class="placeholder">Пока тихо...</p>
+      </div>
     </div>
   </section>
 
@@ -205,7 +257,7 @@
       </div>
       <div id="wanted-info" class="op-info"></div>
       <h3 style="color:#f0f6fc;font-size:14px;margin:10px 0 8px 0">
-        Кого отправить (выберите сотрудников):
+        Кого отправить:
       </h3>
       <div id="wanted-staff-picker" class="staff-picker">
         <p class="placeholder">Нет сотрудников</p>
