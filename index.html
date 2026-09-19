@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>ПОЛКОВНИК — Симулятор ведомства</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ЭКРАН 1: ВЫБОР ОРГАНИЗАЦИИ -->
+<div id="screen-org" class="screen active">
+  <h1 class="title">🎖️ ПОЛКОВНИК</h1>
+  <p class="subtitle">Выберите ведомство, которое возглавите</p>
+  <div class="org-choice">
+    <div class="org-card" onclick="Game.chooseOrg('FSB')">
+      <div class="org-icon">🔵</div>
+      <h2>ФСБ</h2>
+      <p>Контрразведка, антитеррор, слежка, кибербезопасность</p>
+      <ul>
+        <li>✅ Доступ к прослушке и дронам</li>
+        <li>⚠️ Жёсткий отбор кадров</li>
+        <li>🎯 Уникальные миссии: шпионы, ячейки</li>
+      </ul>
+    </div>
+    <div class="org-card" onclick="Game.chooseOrg('MVD')">
+      <div class="org-icon">🟢</div>
+      <h2>МВД</h2>
+      <p>Розыск, патрули, массовые мероприятия</p>
+      <ul>
+        <li>✅ Больше бюджета и людей</li>
+        <li>⚠️ Бюрократия и жалобы</li>
+        <li>🎯 Уникальные миссии: облавы, оцепления</li>
+      </ul>
+    </div>
+  </div>
+  <div id="load-slot" class="load-slot" style="display:none">
+    <button class="btn primary" onclick="Game.loadGame()">💾 Загрузить сохранение</button>
+  </div>
+</div>
+
+<!-- ЭКРАН 2: КАБИНЕТ -->
+<div id="screen-office" class="screen">
+  <header class="topbar">
+    <div class="topbar-left">
+      <span id="org-name">—</span>
+      <span id="my-rank" class="rank-badge">Полковник</span>
+    </div>
+    <div class="topbar-right">
+      <span>💰 <b id="stat-money">0</b></span>
+      <span>⭐ <b id="stat-rep">0</b></span>
+      <span>📊 <b id="stat-exp">0</b></span>
+      <span>👥 <b id="stat-staff">0</b></span>
+      <span>🏥 <b id="stat-hospital">0</b></span>
+      <button class="btn small" onclick="Game.saveGame()">💾 Сохранить</button>
+      <button class="btn small danger" onclick="Game.resetGame()">🗑 Сброс</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="hr">👥 Отдел кадров</button>
+    <button class="tab" data-tab="hospital">🏥 Больничный</button>
+    <button class="tab" data-tab="groups">🎯 Группы</button>
+    <button class="tab" data-tab="ops">🚨 Операции</button>
+    <button class="tab" data-tab="wanted">🔍 Розыск</button>
+    <button class="tab" data-tab="log">📜 Журнал</button>
+  </nav>
+
+  <!-- ВКЛАДКА: КАДРЫ -->
+  <section id="tab-hr" class="tab-content active">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Собеседование</h2>
+        <button class="btn primary" onclick="Game.generateCandidate()">
+          📞 Вызвать следующего кандидата
+        </button>
+      </div>
+      <div id="candidate-card" class="candidate-card empty">
+        <p class="placeholder">Нажмите «Вызвать следующего кандидата», чтобы начать собеседование</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Личный состав (<span id="staff-count">0</span>)</h2>
+      <div id="staff-list" class="staff-list">
+        <p class="placeholder">Пока никого нет</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВКЛАДКА: БОЛЬНИЧНЫЙ -->
+  <section id="tab-hospital" class="tab-content">
+    <div class="panel">
+      <h2>🏥 На больничном (<span id="hospital-count">0</span>)</h2>
+      <p class="placeholder" style="text-align:left;font-style:normal;color:#8b949e;padding:0 0 15px 0">
+        Раненые сотрудники не могут быть в группах и операциях, пока не восстановятся.
+        Лечение ускоряется за счёт бюджета.
+      </p>
+      <div class="panel-header" style="margin-bottom:15px">
+        <button class="btn" onclick="Game.healAllFast()">💊 Ускорить лечение (10 000₽ / чел.)</button>
+        <button class="btn" onclick="Game.nextDay()">⏭ Следующий день</button>
+      </div>
+      <div id="hospital-list" class="staff-list">
+        <p class="placeholder">Никто не ранен</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВКЛАДКА: ГРУППЫ -->
+  <section id="tab-groups" class="tab-content">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Создать группу</h2>
+      </div>
+      <div class="group-form">
+        <input id="group-name" placeholder="Название (напр. Альфа)" maxlength="20">
+        <select id="group-icon">
+          <option value="🦅">🦅 Альфа</option>
+          <option value="🐺">🐺 Омега</option>
+          <option value="🕶️">🕶️ Наблюдение</option>
+          <option value="💻">💻 Киберотдел</option>
+          <option value="🚔">🚔 Захват</option>
+          <option value="🎭">🎭 Внедрение</option>
+          <option value="🚁">🚁 Авиация</option>
+          <option value="__custom">🖼️ Своя иконка (URL)</option>
+        </select>
+        <input id="group-icon-url" placeholder="https://... или /img/icon.png"
+               style="display:none" oninput="Game.previewIcon(this.value)">
+        <button class="btn primary" onclick="Game.createGroup()">➕ Создать</button>
+      </div>
+      <div id="icon-preview" style="margin-top:10px"></div>
+    </div>
+    <div class="panel">
+      <h2>Созданные группы</h2>
+      <div id="groups-list" class="groups-list">
+        <p class="placeholder">Групп пока нет</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВКЛАДКА: ОПЕРАЦИИ -->
+  <section id="tab-ops" class="tab-content">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Поступившие вызовы</h2>
+        <button class="btn" onclick="Game.generateEvent()">📡 Симулировать вызов</button>
+      </div>
+      <div id="events-list" class="events-list">
+        <p class="placeholder">Пока тихо</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВКЛАДКА: РОЗЫСК -->
+  <section id="tab-wanted" class="tab-content">
+    <div class="panel">
+      <h2>Объявить в розыск</h2>
+      <div class="group-form">
+        <input id="wanted-name" placeholder="ФИО">
+        <input id="wanted-crime" placeholder="Статья / преступление">
+        <select id="wanted-level">
+          <option value="Местный">Местный</option>
+          <option value="Федеральный">Федеральный</option>
+          <option value="Международный">Международный</option>
+        </select>
+        <button class="btn primary" onclick="Game.addWanted()">🔍 В розыск</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Картотека</h2>
+      <div id="wanted-list" class="wanted-list">
+        <p class="placeholder">Пусто</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВКЛАДКА: ЖУРНАЛ -->
+  <section id="tab-log" class="tab-content">
+    <div class="panel">
+      <h2>Журнал событий</h2>
+      <div id="log-list" class="log-list"></div>
+    </div>
+  </section>
+</div>
+
+<script src="ranks.js"></script>
+<script src="game.js"></script>
+</body>
+        </html>
