@@ -1,24 +1,27 @@
 // ============================================================
-//  ПОЛКОВНИК — game.js — ЧАСТЬ 1/4
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 1/5
+//  Ядро, состояние, кадры
 // ============================================================
 
-const SAVE_KEY = 'polkovnik_save_v5';
-const SAVE_VERSION = 5;
+const SAVE_KEY = 'polkovnik_save_v6';
+const SAVE_VERSION = 6;
 const HEAL_PER_DAY = 15;
 const HEAL_COST = 10000;
 const MAX_REPRIMANDS = 3;
 const OP_STEP_MS = 60000;
-const EVENT_INTERVAL_MS = 300000;    // 5 минут
-const CANDIDATE_INTERVAL_MS = 300000; // 10 минут (2 кандидата за раз)
+const EVENT_INTERVAL_MS = 300000;
+const CANDIDATE_INTERVAL_MS = 300000;
 const ADMIN_PASSWORD = '1212';
+const AMMO_PER_OP = 30; // патронов на операцию
 
 const State = {
   org: null, myRank: 'Полковник', myExp: 0, money: 100000, reputation: 50,
   day: 1, staff: [], groups: [], events: [], wanted: [], log: [],
   candidates: [], currentCandId: null, selectedStaff: [], selectedTeam: [],
-  archive: [],
+  archive: [], inventory: {}, myTransport: [],
+  smi: [], bribe: null,
   nextStaffId: 1, nextGroupId: 1, nextEventId: 1, nextWantedId: 1,
-  _eventTimer: null, _candTimer: null
+  _eventTimer: null, _candTimer: null, _bribeTimer: null
 };
 
 const FIRST_NAMES_M = ['Александр','Дмитрий','Сергей','Андрей','Иван','Максим','Николай','Владимир','Егор','Артём','Кирилл','Роман','Павел','Денис','Антон','Виктор','Олег','Игорь','Юрий','Константин','Григорий','Тимур','Руслан','Валерий','Станислав','Борис','Геннадий','Аркадий','Леонид','Пётр','Василий','Степан','Фёдор','Матвей','Никита','Арсений'];
@@ -29,7 +32,6 @@ const CITIES = ['Москва','Санкт-Петербург','Казань','�
 const MISSIONS_FSB = ['Терроризм','Захват заложников','Шпионаж','Экстремистская ячейка','Госизмена','Кибератака','Контрабанда','Похищение дипломата','Взрыв','Захват автобуса'];
 const MISSIONS_MVD = ['Угон','Кража','Разбойное нападение','Убийство','Наркоторговля','Мошенничество','Хулиганство','Массовая драка','Похищение','Поджог','Вооружённое ограбление','Стрельба'];
 
-// Работа до поступления
 const PRIOR_JOBS = ['Армия', 'МВД'];
 const HOTSPOT_LABELS = ['Чечня','Дагестан','Сирия','Афганистан','Таджикистан'];
 const MED_ISSUES = ['Гипертония','Астма','Сахарный диабет','Проблемы со зрением','Плоскостопие','Сколиоз','Аллергия','Мигрень'];
@@ -66,16 +68,20 @@ const Game = {
           if (!State.selectedStaff) State.selectedStaff = [];
           if (!State.selectedTeam) State.selectedTeam = [];
           if (!State.archive) State.archive = [];
+          if (!State.inventory) State.inventory = {};
+          if (!State.myTransport) State.myTransport = [];
+          if (!State.smi) State.smi = [];
           if (State.currentCandId === undefined) State.currentCandId = null;
           State._eventTimer = null;
           State._candTimer = null;
+          State._bribeTimer = null;
 
           document.getElementById('screen-org').classList.remove('active');
           document.getElementById('screen-org').style.display = 'none';
           document.getElementById('screen-office').classList.add('active');
           document.getElementById('screen-office').style.display = 'block';
           document.getElementById('org-name').textContent =
-            State.org === 'FSB' ? '🔵 ФСБ России' : '🟢 МВД России';
+            State.org === 'FSB' ? '🚨 ФСБ России' : '🚨 МВД России';
           document.getElementById('my-rank').textContent = State.myRank;
 
           this.renderAll();
@@ -97,6 +103,9 @@ const Game = {
     State.selectedStaff = [];
     State.selectedTeam = [];
     State.archive = [];
+    State.inventory = { ammo: 100 }; // стартовые патроны
+    State.myTransport = ['uaz'];     // стартовый УАЗ
+    State.smi = [];
 
     const orgScreen = document.getElementById('screen-org');
     const officeScreen = document.getElementById('screen-office');
@@ -107,7 +116,7 @@ const Game = {
     window.scrollTo(0, 0);
 
     document.getElementById('org-name').textContent =
-      org === 'FSB' ? '🔵 ФСБ России' : '🟢 МВД России';
+      org === 'FSB' ? '🚨 ФСБ России' : '🚨 МВД России';
     document.getElementById('my-rank').textContent = State.myRank;
 
     this.log(`Вы возглавили ${org === 'FSB' ? 'ФСБ' : 'МВД'}`, 'success');
@@ -120,6 +129,7 @@ const Game = {
   startTimers() {
     if (State._eventTimer) clearInterval(State._eventTimer);
     if (State._candTimer) clearInterval(State._candTimer);
+    if (State._bribeTimer) clearInterval(State._bribeTimer);
 
     setTimeout(() => this.generateEvent(), 30000);
     setTimeout(() => { this.generateCandidate(); this.generateCandidate(); }, 15000);
@@ -131,6 +141,13 @@ const Game = {
         this.generateCandidate();
       }
     }, CANDIDATE_INTERVAL_MS);
+
+    // Взятки — раз в 3 минуты, шанс 30%
+    State._bribeTimer = setInterval(() => {
+      if (chance(0.3) && !State.bribe && State.staff.length > 0) {
+        this.generateBribe();
+      }
+    }, 180000);
   },
 
   bindTabs() {
@@ -140,6 +157,9 @@ const Game = {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'shop') this.renderShop();
+        if (tab.dataset.tab === 'transport') this.renderTransport();
+        if (tab.dataset.tab === 'smi') this.renderSMI();
       });
     });
   },
@@ -174,7 +194,6 @@ const Game = {
     const age = rndInt(21, 45);
     const hasCriminal = chance(0.15);
     const hasHealth = chance(0.2);
-    const served = chance(0.95); // почти все служили
 
     const cand = {
       id: State.nextStaffId++,
@@ -188,7 +207,7 @@ const Game = {
       rank: State.org === 'FSB' ? 'Прапорщик' : 'Рядовой',
       exp: 0, health: 100, fatigue: 0,
       salary: rndInt(30000, 60000),
-      wounded: false, healDays: 0,
+      wounded: false, healDays: 0, dying: false,
       reprimands: 0,
       hireDay: State.day
     };
@@ -263,7 +282,7 @@ const Game = {
         <div class="doc-row"><span>Допуск:</span><b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Разрешён' : 'Ограничен'}</b></div>`;
     } else if (type === 'military') {
       v.innerHTML = `
-        <div class="doc-title">🎖️ Военбилет</div>
+        <div class="doc-title">🎖️ Военный билет</div>
         <div class="doc-row"><span>Служба:</span><b class="doc-good">Проходил</b></div>
         <div class="doc-row"><span>Категория:</span><b>${c.military.category}</b></div>
         <div class="doc-row"><span>Горячие точки:</span><b class="${c.military.hotSpots ? 'doc-warn' : ''}">${c.military.hotSpots ? 'Да (' + c.military.hotspot + ')' : 'Нет'}</b></div>`;
@@ -303,24 +322,22 @@ const Game = {
   }
 };
 // ============================================================
-//  ПОЛКОВНИК — game.js — ЧАСТЬ 2/4
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 2/5
+//  Сотрудники, личное дело, группы
 // ============================================================
 
 Object.assign(Game, {
 
   findStaff(id) { return State.staff.find(s => s.id === id); },
 
-  // Проверка: находится ли сотрудник в группе
   isInGroup(staffId) {
     return State.groups.some(g => g.members.includes(staffId));
   },
 
-  // Получить ранг сотрудника по имени
   getRankIndex(rankName) {
     return RANKS[State.org].findIndex(r => r.name === rankName);
   },
 
-  // Мой ранг (индекс)
   getMyRankIndex() {
     return this.getRankIndex(State.myRank);
   },
@@ -376,13 +393,14 @@ Object.assign(Game, {
     list.innerHTML = wounded.map(s => `
       <div class="staff-card wounded">
         <div class="staff-top">
-          <div class="staff-name">🏥 ${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
+          <div class="staff-name">${s.dying ? '💀' : '🏥'} ${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
           <div class="staff-rank">${s.rank}</div>
         </div>
         <div class="health-bar"><div style="width:${s.health}%"></div></div>
         <div class="staff-stats">
           <span>❤️ ${s.health}/100</span>
           <span>⏳ ${s.healDays} дн.</span>
+          ${s.dying ? '<span style="color:#f85149">⚠ КРИТИЧНО</span>' : ''}
         </div>
         <button class="btn-delo" onclick="Game.openDossier(${s.id})">📁 Личное дело</button>
       </div>`).join('');
@@ -392,6 +410,7 @@ Object.assign(Game, {
     const s = this.findStaff(id);
     if (!s) return;
     const rep = s.reprimands || 0;
+    const inGroup = State.groups.find(g => g.members.includes(s.id));
 
     const overlay = document.createElement('div');
     overlay.className = 'dossier-overlay';
@@ -410,6 +429,7 @@ Object.assign(Game, {
         <div class="d-row"><span>Здоровье:</span><b>${s.health}/100</b></div>
         <div class="d-row"><span>Усталость:</span><b>${s.fatigue}</b></div>
         <div class="d-row"><span>Выговоры:</span><b>${rep} / 3</b></div>
+        <div class="d-row"><span>Группа:</span><b>${inGroup ? inGroup.name : 'Не в группе'}</b></div>
 
         <div class="d-section">
           <div class="d-section-title">⚙ Действия</div>
@@ -433,21 +453,16 @@ Object.assign(Game, {
     if (o) o.remove();
   },
 
-  // ПОВЫШЕНИЕ С ОГРАНИЧЕНИЕМ "не выше меня"
   promote(id) {
     const s = this.findStaff(id);
     if (!s) return;
     const list = RANKS[State.org];
     const idx = list.findIndex(r => r.name === s.rank);
     if (idx < 0) return;
-
     const myIdx = this.getMyRankIndex();
-
-    // Нельзя повысить до своего ранга или выше
     if (idx + 1 >= myIdx) {
-      return this.toast(`Нельзя выше ${list[myIdx - 1].name} (ваше звание: ${State.myRank})`, 'danger');
+      return this.toast(`Нельзя выше ${list[myIdx - 1].name} (ваше: ${State.myRank})`, 'danger');
     }
-
     const old = s.rank;
     s.rank = list[idx + 1].name;
     this.log(`⬆ ${s.name}: ${old} → ${s.rank}`, 'success');
@@ -481,7 +496,6 @@ Object.assign(Game, {
     this.log(`⚠ ${s.name}: выговор (${s.reprimands}/3)`, 'warn');
     this.toast(`${s.name}: выговор ${s.reprimands}/3`, 'warn');
     this.closeDossier();
-
     if (s.reprimands >= MAX_REPRIMANDS) {
       this.log(`🚫 ${s.name} уволен за 3 выговора`, 'danger');
       this.toast(`${s.name} уволен (3 выговора)`, 'danger');
@@ -504,7 +518,7 @@ Object.assign(Game, {
     s.reprimands--;
     s.skills.loyalty += 5;
     this.log(`✖ ${s.name}: выговор снят (${s.reprimands}/3)`, 'success');
-    this.toast(`Выговор снят`, 'success');
+    this.toast('Выговор снят', 'success');
     this.closeDossier();
     this.renderStaff();
     this.autoSave();
@@ -530,7 +544,7 @@ Object.assign(Game, {
     if (!s || !s.wounded) return;
     if (State.money < HEAL_COST) return this.toast('Недостаточно средств', 'danger');
     State.money -= HEAL_COST;
-    s.health = 100; s.healDays = 0; s.wounded = false;
+    s.health = 100; s.healDays = 0; s.wounded = false; s.dying = false;
     this.log(`💊 ${s.name} вылечен`, 'success');
     this.toast(`${s.name} восстановлен`, 'success');
     this.closeDossier();
@@ -544,7 +558,7 @@ Object.assign(Game, {
     const cost = wounded.length * HEAL_COST;
     if (State.money < cost) return this.toast(`Нужно ${formatMoney(cost)}`, 'danger');
     State.money -= cost;
-    wounded.forEach(s => { s.health = 100; s.healDays = 0; s.wounded = false; });
+    wounded.forEach(s => { s.health = 100; s.healDays = 0; s.wounded = false; s.dying = false; });
     this.log(`💊 Вылечено ${wounded.length} чел.`, 'success');
     this.toast('Все вылечены', 'success');
     this.renderStaff();
@@ -553,43 +567,73 @@ Object.assign(Game, {
 
   nextDay() {
     State.day++;
+
+    // Проверка тяжелораненых
+    const toRemove = [];
     State.staff.forEach(s => {
       if (s.wounded) {
         s.health = clamp(s.health + HEAL_PER_DAY, 0, 100);
         s.healDays = Math.max(0, s.healDays - 1);
+
+        // Реальное время: тяжелораненый может умереть
+        if (s.health < 30) {
+          s.dying = true;
+          if (chance(0.25)) {
+            toRemove.push(s);
+            this.log(`💀 ${s.name} скончался от ран`, 'danger');
+            this.toast(`💀 ${s.name} погиб`, 'danger');
+            this.addSMI('negative', 'Гибель сотрудника',
+              `${s.name} скончался от ран, полученных на задании.`,
+              `Репутация -5`);
+            State.reputation -= 5;
+            return;
+          }
+        } else {
+          s.dying = false;
+        }
+
         if (s.healDays === 0 || s.health >= 100) {
-          s.health = 100; s.wounded = false; s.healDays = 0;
+          s.health = 100; s.wounded = false; s.healDays = 0; s.dying = false;
           this.log(`✅ ${s.name} вернулся с больничного`, 'success');
         }
       }
       s.fatigue = Math.max(0, s.fatigue - 20);
     });
+
+    toRemove.forEach(s => {
+      State.groups.forEach(g => { g.members = g.members.filter(mid => mid !== s.id); });
+      State.staff = State.staff.filter(x => x.id !== s.id);
+    });
+
     const totalSalary = State.staff.reduce((sum, s) => sum + s.salary, 0);
     State.money -= totalSalary;
     this.log(`📅 День ${State.day}. Зарплаты: -${formatMoney(totalSalary)}`, 'info');
     this.toast(`День ${State.day}`, 'info');
     this.renderStaff();
+    this.renderSMI();
     this.autoSave();
   },
 
-  // ПИКЕР — только СВОБОДНЫЕ сотрудники
   renderStaffPicker() {
     const picker = document.getElementById('group-staff-picker');
     if (!picker) return;
-    const available = State.staff.filter(s => !s.wounded && !this.isInGroup(s.id));
+    const available = State.staff.filter(s => !s.wounded);
     if (available.length === 0) {
-      picker.innerHTML = '<p class="placeholder">Нет свободных сотрудников</p>';
+      picker.innerHTML = '<p class="placeholder">Нет сотрудников</p>';
       return;
     }
     picker.innerHTML = available.map(s => {
+      const inGroup = State.groups.find(g => g.members.includes(s.id));
+      const busy = !!inGroup;
       const checked = State.selectedStaff.includes(s.id);
+      const sub = busy ? `в группе «${inGroup.name}»` : s.rank + ' · свободен';
       return `
-        <label class="picker-item">
-          <input type="checkbox" ${checked ? 'checked' : ''}
+        <label class="picker-item" style="${busy ? 'opacity:.4' : ''}">
+          <input type="checkbox" ${checked ? 'checked' : ''} ${busy ? 'disabled' : ''}
             onchange="Game.toggleStaffPick(${s.id}, this.checked)">
           <div class="pi-info">
             <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
-            <div class="pi-rank">${s.rank} · свободен</div>
+            <div class="pi-rank">${sub}</div>
           </div>
         </label>`;
     }).join('');
@@ -670,10 +714,8 @@ Object.assign(Game, {
   addToGroup(groupId) {
     const g = State.groups.find(x => x.id === groupId);
     if (!g) return;
-    const available = State.staff.filter(s =>
-      !s.wounded && !g.members.includes(s.id) && !this.isInGroup(s.id)
-    );
-    if (available.length === 0) return this.toast('Нет свободных сотрудников', 'warn');
+    const available = State.staff.filter(s => !s.wounded);
+    if (available.length === 0) return this.toast('Нет сотрудников', 'warn');
 
     const overlay = document.createElement('div');
     overlay.className = 'dossier-overlay';
@@ -682,17 +724,25 @@ Object.assign(Game, {
 
     overlay.innerHTML = `
       <div class="dossier">
-        <h2>➕ ДОБАВИТЬ В «${g.name}»</h2>
+        <h2>➕ В ГРУППУ «${g.name}»</h2>
         <div style="max-height: 300px; overflow-y: auto;">
-          ${available.map(s => `
-            <label class="picker-item" style="margin-bottom:5px">
-              <input type="checkbox" id="add-${s.id}">
-              <div class="pi-info">
-                <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
-                <div class="pi-rank">${s.rank}</div>
-              </div>
-            </label>
-          `).join('')}
+          ${available.map(s => {
+            const inThis = g.members.includes(s.id);
+            const inOther = State.groups.find(og => og.id !== groupId && og.members.includes(s.id));
+            const busy = inThis || !!inOther;
+            const sub = inThis ? 'уже в этой группе'
+              : inOther ? `в группе «${inOther.name}»`
+              : s.rank + ' · свободен';
+            return `
+              <label class="picker-item" style="margin-bottom:5px; ${busy ? 'opacity:.4' : ''}">
+                <input type="checkbox" id="add-${s.id}" ${busy ? 'disabled' : ''}>
+                <div class="pi-info">
+                  <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
+                  <div class="pi-rank">${sub}</div>
+                </div>
+              </label>
+            `;
+          }).join('')}
         </div>
         <button class="d-close" onclick="Game.confirmAddToGroup(${g.id})">ДОБАВИТЬ</button>
       </div>
@@ -708,15 +758,14 @@ Object.assign(Game, {
   confirmAddToGroup(groupId) {
     const g = State.groups.find(x => x.id === groupId);
     if (!g) return;
-    const available = State.staff.filter(s =>
-      !s.wounded && !g.members.includes(s.id) && !this.isInGroup(s.id)
-    );
     let added = 0;
-    available.forEach(s => {
+    State.staff.forEach(s => {
       const cb = document.getElementById('add-' + s.id);
-      if (cb && cb.checked) {
-        g.members.push(s.id);
-        added++;
+      if (cb && cb.checked && !cb.disabled) {
+        if (!g.members.includes(s.id)) {
+          g.members.push(s.id);
+          added++;
+        }
       }
     });
     this.closeAddGroup();
@@ -737,11 +786,96 @@ Object.assign(Game, {
   }
 });
 // ============================================================
-//  ПОЛКОВНИК — game.js — ЧАСТЬ 3/4
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 3.1/5
+//  Транспорт + открытие операции
 // ============================================================
+
+const TRANSPORT_ITEMS = [
+  { id: 'uaz',   icon: '🚙', name: 'УАЗ-469',      desc: 'Базовый вездеход',            speed: 1,   armor: 0,  price: 0,      passengers: 4 },
+  { id: 'tigr',  icon: '🚐', name: 'Тигр',          desc: 'Бронированный внедорожник',   speed: 1.3, armor: 20, price: 250000, passengers: 6 },
+  { id: 'kamaz', icon: '🚚', name: 'Камаз',         desc: 'Грузовик для большой группы', speed: 0.9, armor: 10, price: 180000, passengers: 12 },
+  { id: 'btr',   icon: '🚜', name: 'БТР-80',        desc: 'Бронетранспортёр',            speed: 1.1, armor: 40, price: 500000, passengers: 8 },
+  { id: 'heli',  icon: '🚁', name: 'Вертолёт Ми-8', desc: 'Быстрое прибытие',            speed: 2,   armor: 15, price: 900000, passengers: 6 }
+];
+
+const EQUIP_ITEMS = [
+  { id: 'ammo',      icon: '📦', name: 'Патроны',      desc: 'Тратится на операцию',   required: true,  amount: AMMO_PER_OP },
+  { id: 'armor',     icon: '🛡️', name: 'Бронежилет',   desc: '−30% к ранению',          required: false, bonus: 0.15 },
+  { id: 'helmet',    icon: '⛑️', name: 'Шлем',         desc: '−20% к ранению',          required: false, bonus: 0.1 },
+  { id: 'grenade',   icon: '💣', name: 'Граната',      desc: '+5% к успеху',            required: false, bonus: 0.05 },
+  { id: 'smoke',     icon: '💨', name: 'Дымовая',      desc: '+5% к успеху',            required: false, bonus: 0.05 },
+  { id: 'flashbang', icon: '⚡', name: 'Светошумовая',  desc: '+7% к успеху',            required: false, bonus: 0.07 },
+  { id: 'medkit',    icon: '💊', name: 'Аптечка',      desc: 'Автолечение 1 бойца',     required: false, bonus: 0.1 },
+  { id: 'drone',     icon: '🛸', name: 'Дрон',         desc: '+10% к успеху',           required: false, bonus: 0.1 }
+];
 
 Object.assign(Game, {
 
+  // ============ ТРАНСПОРТ ============
+  renderTransport() {
+    const el = document.getElementById('transport-list');
+    const moneyEl = document.getElementById('transport-money');
+    if (!el) return;
+    if (moneyEl) moneyEl.textContent = formatMoney(State.money);
+
+    el.innerHTML = TRANSPORT_ITEMS.map(t => {
+      const owned = State.myTransport.includes(t.id);
+      const canBuy = State.money >= t.price;
+      return `
+        <div class="transport-card ${owned ? 'owned' : ''}">
+          <div class="tc-icon">${t.icon}</div>
+          <div class="tc-info">
+            <div class="tc-name">${t.name}${owned ? ' ✅' : ''}</div>
+            <div class="tc-desc">${t.desc}</div>
+            <div class="tc-stats">⚡ ×${t.speed} · 🛡 ${t.armor} · 👥 ${t.passengers}</div>
+            <div class="tc-price">${t.price === 0 ? 'Стартовый' : '💰 ' + formatMoney(t.price)}</div>
+          </div>
+          <button class="tc-buy ${owned ? 'owned' : (canBuy ? '' : 'disabled')}"
+            onclick="Game.buyTransport('${t.id}')"
+            ${owned || !canBuy ? 'disabled' : ''}>
+            ${owned ? 'Куплен' : 'Купить'}
+          </button>
+        </div>
+      `;
+    }).join('');
+    this.renderMyTransport();
+  },
+
+  renderMyTransport() {
+    const el = document.getElementById('my-transport');
+    if (!el) return;
+    if (!State.myTransport || State.myTransport.length === 0) {
+      el.innerHTML = '<p class="placeholder">Пусто</p>';
+      return;
+    }
+    el.innerHTML = State.myTransport.map(id => {
+      const t = TRANSPORT_ITEMS.find(x => x.id === id);
+      if (!t) return '';
+      return `
+        <div class="inventory-item">
+          <div class="inv-icon">${t.icon}</div>
+          <div class="inv-name">${t.name}</div>
+          <div class="inv-count">×1</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  buyTransport(id) {
+    const t = TRANSPORT_ITEMS.find(x => x.id === id);
+    if (!t) return;
+    if (State.myTransport.includes(id)) return this.toast('Уже куплен', 'warn');
+    if (State.money < t.price) return this.toast('Недостаточно денег', 'danger');
+    State.money -= t.price;
+    State.myTransport.push(id);
+    this.log(`🚗 Куплен транспорт: ${t.name}`, 'success');
+    this.toast(`Куплен: ${t.name}`, 'success');
+    this.renderTransport();
+    this.updateStats();
+    this.autoSave();
+  },
+
+  // ============ СОБЫТИЯ ============
   generateEvent() {
     if (!State.org) return;
     const active = State.events.filter(e => e.status === 'pending');
@@ -789,13 +923,14 @@ Object.assign(Game, {
   openOperation(eventId, mode) {
     const e = State.events.find(x => x.id === eventId);
     if (!e || e.status !== 'pending') return;
+
     document.getElementById('operation-detail').style.display = 'block';
     document.getElementById('op-title').textContent = e.title;
     document.getElementById('op-info').innerHTML = `
       <div class="oi-row"><span>📍 Адрес:</span><b>${e.addr}</b></div>
       <div class="oi-row"><span>⚠️ Угроза:</span><b>${{high:'Высокая',medium:'Средняя',low:'Низкая'}[e.threat]}</b></div>
       <div class="oi-row"><span>🔫 Преступников:</span><b>${e.criminals}</b></div>
-      <div class="oi-row"><span>🎯 Режим:</span><b>${mode === 'self' ? 'Лично' : 'Группа'}</b></div>
+      <div class="oi-row"><span>📦 Патронов нужно:</span><b style="color:${(State.inventory.ammo||0) >= AMMO_PER_OP ? '#3fb950' : '#f85149'}">${AMMO_PER_OP} (на складе: ${State.inventory.ammo||0})</b></div>
     `;
     document.getElementById('op-log').innerHTML = '';
     document.getElementById('op-result').style.display = 'none';
@@ -820,7 +955,7 @@ Object.assign(Game, {
               return s && !s.wounded;
             });
             return `
-              <div class="gp-item" onclick="Game.sendGroup(${e.id}, ${g.id})">
+              <div class="gp-item" onclick="Game.openEquipPicker(${e.id}, ${g.id})">
                 <div class="gp-name">${g.custom ? `<img src="${g.icon}">` : g.icon} ${g.name}</div>
                 <div class="gp-info">👥 Бойцов: ${alive.length}</div>
               </div>`;
@@ -832,16 +967,121 @@ Object.assign(Game, {
       btn.className = 'btn primary';
       btn.style.marginTop = '10px';
       btn.style.width = '100%';
-      btn.textContent = '🚗 Выехать';
-      btn.onclick = () => this.goSelf(e.id);
+      btn.textContent = '🚗 Выехать лично';
+      btn.onclick = () => this.openEquipPicker(e.id, null);
       document.getElementById('op-log').appendChild(btn);
     }
     document.getElementById('operation-detail').scrollIntoView({ behavior: 'smooth' });
   },
 
-  closeOperation() {
-    document.getElementById('operation-detail').style.display = 'none';
+  // ============ ВЫБОР ЭКИПИРОВКИ ============
+  openEquipPicker(eventId, groupId) {
+    const e = State.events.find(x => x.id === eventId);
+    if (!e) return;
+    State._equipOp = { eventId, groupId };
+
+    const overlay = document.createElement('div');
+    overlay.className = 'equip-overlay';
+    overlay.id = 'equip-overlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) Game.closeEquip(); };
+
+    const haveAmmo = (State.inventory.ammo || 0) >= AMMO_PER_OP;
+
+    overlay.innerHTML = `
+      <div class="equip-panel">
+        <h2>🎒 ЭКИПИРОВКА</h2>
+        <div style="color:#8b949e;font-size:12px;margin-bottom:10px">
+          Выберите, что взять. Патроны обязательны (${AMMO_PER_OP} шт).
+        </div>
+
+        ${EQUIP_ITEMS.map(item => {
+          const count = State.inventory[item.id] || 0;
+          const disabled = count <= 0;
+          const checked = item.required && haveAmmo ? 'checked' : (item.required ? '' : 'checked');
+          return `
+            <label class="eq-item" style="${disabled ? 'opacity:.4' : ''}">
+              <input type="checkbox" id="eq-${item.id}"
+                ${checked} ${disabled || item.required ? 'disabled' : ''}>
+              <div class="eq-icon">${item.icon}</div>
+              <div class="eq-info">
+                <div class="eq-name">${item.name}${item.required ? ' <span style="color:#f85149">*</span>' : ''}</div>
+                <div class="eq-count">${item.desc} · на складе: ${count}</div>
+              </div>
+            </label>
+          `;
+        }).join('')}
+
+        <div style="color:#8b949e;font-size:12px;margin:12px 0 6px 0">🚗 Транспорт:</div>
+        <select id="eq-transport" style="width:100%;padding:10px;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;font-size:14px">
+          ${State.myTransport.map(id => {
+            const t = TRANSPORT_ITEMS.find(x => x.id === id);
+            return t ? `<option value="${t.id}">${t.icon} ${t.name}</option>` : '';
+          }).join('')}
+        </select>
+
+        <div class="eq-actions">
+          <button class="eq-btn cancel" onclick="Game.closeEquip()">Отмена</button>
+          <button class="eq-btn go" onclick="Game.confirmEquip()">
+            ${haveAmmo ? '🚔 Отправить' : '❌ Нет патронов'}
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
   },
+
+  closeEquip() {
+    const o = document.getElementById('equip-overlay');
+    if (o) o.remove();
+    State._equipOp = null;
+  },
+
+  confirmEquip() {
+    if (!State._equipOp) return;
+    const { eventId, groupId } = State._equipOp;
+
+    if ((State.inventory.ammo || 0) < AMMO_PER_OP) {
+      return this.toast('Недостаточно патронов! Купи в магазине', 'danger');
+    }
+
+    const usedEquip = {};
+    let totalBonus = 0;
+    EQUIP_ITEMS.forEach(item => {
+      const cb = document.getElementById('eq-' + item.id);
+      if (cb && cb.checked) {
+        if ((State.inventory[item.id] || 0) > 0 || item.required) {
+          usedEquip[item.id] = true;
+          if (item.bonus) totalBonus += item.bonus;
+        }
+      }
+    });
+
+    const transportId = document.getElementById('eq-transport').value;
+    const transport = TRANSPORT_ITEMS.find(t => t.id === transportId);
+
+    // Списание
+    if (usedEquip.ammo) State.inventory.ammo -= AMMO_PER_OP;
+    ['armor','helmet','grenade','smoke','flashbang','medkit','drone'].forEach(id => {
+      if (usedEquip[id] && State.inventory[id]) {
+        State.inventory[id] -= 1;
+      }
+    });
+
+    this.closeEquip();
+
+    if (groupId) {
+      this.sendGroup(eventId, groupId, totalBonus, transport);
+    } else {
+      this.goSelf(eventId, totalBonus, transport);
+    }
+  }
+});
+// ============================================================
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 3.2/5
+//  Отправка группы, личный выезд, результат
+// ============================================================
+
+Object.assign(Game, {
 
   logOp(text, type = 'info') {
     const log = document.getElementById('op-log');
@@ -857,7 +1097,8 @@ Object.assign(Game, {
 
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
-  async sendGroup(eventId, groupId) {
+  // ============ ОТПРАВКА ГРУППЫ ============
+  async sendGroup(eventId, groupId, equipBonus = 0, transport = null) {
     const e = State.events.find(x => x.id === eventId);
     const g = State.groups.find(x => x.id === groupId);
     if (!e || !g) return;
@@ -868,12 +1109,20 @@ Object.assign(Game, {
     const fighters = g.members.map(id => this.findStaff(id)).filter(s => s && !s.wounded);
     if (fighters.length === 0) return this.toast('Группа небоеспособна', 'danger');
 
-    this.logOp(`🚔 Группа «${g.name}» выехала на задание`, 'system');
-    await this.sleep(OP_STEP_MS);
+    const tName = transport ? `${transport.icon} ${transport.name}` : '🚙 УАЗ';
+    const speedSteps = transport ? Math.max(1, Math.round(5 / transport.speed)) : 5;
+
+    this.logOp(`🚔 Группа «${g.name}» выехала на ${tName}`, 'system');
+    await this.sleep(OP_STEP_MS * (speedSteps / 5));
     this.logOp(`📻 Связь: «Прибыли на место. Занимаем позиции»`, 'info');
     await this.sleep(OP_STEP_MS);
     this.logOp(`👁 Наблюдаем движение. Преступников: ${e.criminals}`, 'warn');
     await this.sleep(OP_STEP_MS);
+
+    if (equipBonus > 0) {
+      this.logOp(`🎒 Использована экипировка (+${Math.round(equipBonus * 100)}%)`, 'info');
+    }
+
     this.logOp(`🚧 Оцепление выставлено. Готовимся к штурму`, 'info');
     await this.sleep(OP_STEP_MS);
     this.logOp(`💥 Штурм начался!`, 'system');
@@ -883,9 +1132,12 @@ Object.assign(Game, {
 
     const avgBravery = fighters.reduce((a, s) => a + s.skills.bravery, 0) / fighters.length;
     const avgIntellect = fighters.reduce((a, s) => a + s.skills.intellect, 0) / fighters.length;
-    const successChance = 0.5 + (avgBravery / 100) * 0.25 + (avgIntellect / 100) * 0.15;
-    const success = chance(successChance);
 
+    let successChance = 0.4 + (avgBravery / 100) * 0.2 + (avgIntellect / 100) * 0.15 + equipBonus;
+    if (transport && transport.armor > 0) successChance += transport.armor / 200;
+    successChance = Math.min(0.95, successChance);
+
+    const success = chance(successChance);
     let ourKilled = 0, ourWounded = 0, enemyKilled = 0, enemyWounded = 0;
 
     if (success) {
@@ -904,26 +1156,33 @@ Object.assign(Game, {
       ourWounded = rndInt(1, Math.max(1, Math.floor(fighters.length / 2)));
     }
 
+    // Броня уменьшает ранения
+    if (transport && transport.armor > 0) {
+      ourWounded = Math.max(0, ourWounded - Math.floor(transport.armor / 20));
+    }
+
     const shuffled = [...fighters].sort(() => Math.random() - 0.5);
+
     for (let i = 0; i < ourWounded && i < shuffled.length; i++) {
       const s = shuffled[i];
       s.health = rndInt(10, 45);
       s.wounded = true;
       s.healDays = rndInt(2, 5);
       s.fatigue += 25;
-      this.logOp(`🏥 ${s.name} ранен, эвакуирован (${s.healDays} дн.)`, 'warn');
+      if (s.health < 30) s.dying = true;
+      this.logOp(`🏥 ${s.name} ранен (${s.healDays} дн.)`, 'warn');
     }
+
     for (let i = 0; i < ourKilled && i + ourWounded < shuffled.length; i++) {
       const s = shuffled[ourWounded + i];
-      this.logOp(`💀 ${s.name} погиб при исполнении`, 'bad');
+      this.logOp(`💀 ${s.name} погиб`, 'bad');
       State.groups.forEach(gr => { gr.members = gr.members.filter(mid => mid !== s.id); });
       State.staff = State.staff.filter(x => x.id !== s.id);
     }
 
     this.logOp(`🛡 Зачистка завершена`, 'info');
-    this.logOp(`📊 Потери противника: убито ${enemyKilled}, ранено ${enemyWounded}`, 'info');
-    this.logOp(`📊 Наши потери: убито ${ourKilled}, ранено ${ourWounded}`,
-      ourKilled > 0 ? 'bad' : 'info');
+    this.logOp(`📊 Враг: убито ${enemyKilled}, ранено ${enemyWounded}`, 'info');
+    this.logOp(`📊 Наши: убито ${ourKilled}, ранено ${ourWounded}`, ourKilled > 0 ? 'bad' : 'info');
 
     if (success) {
       e.status = 'archived';
@@ -931,24 +1190,27 @@ Object.assign(Game, {
       State.reputation += 3;
       State.myExp += 50;
       fighters.forEach(s => { if (!s.wounded) { s.exp += 30; s.fatigue += 15; } });
-      this.logOp(`✅ Операция завершена успешно → в архив`, 'good');
-      this.logOp(`💰 +20 000₽ · ⭐ +3 репутации`, 'good');
-      this.log(`✅ «${g.name}» — ${e.title}. Потери: ${ourKilled}/${ourWounded}`, 'success');
+      this.logOp(`✅ Успех → в архив`, 'good');
+      this.logOp(`💰 +20 000₽ · ⭐ +3`, 'good');
+      this.log(`✅ «${g.name}» — ${e.title}`, 'success');
       this.toast('Успех! +20000₽', 'success');
-
+      this.addSMI('positive', 'Успешная операция',
+        `${g.name} ликвидировала «${e.title}» на ${e.addr}`,
+        'Репутация +3');
       State.archive.push({
-        title: e.title, addr: e.addr, day: State.day,
-        group: g.name, success: true,
-        ourKilled, ourWounded, enemyKilled, enemyWounded
+        title: e.title, addr: e.addr, day: State.day, group: g.name,
+        success: true, ourKilled, ourWounded, enemyKilled, enemyWounded
       });
     } else {
       e.status = 'pending';
       State.reputation -= 5;
       State.myExp += 10;
-      this.logOp(`❌ Операция провалена. Вызов остаётся!`, 'bad');
-      this.logOp(`📉 -5 репутации. Можно отправить другую группу`, 'warn');
-      this.log(`❌ Провал: ${e.title}. Потери: ${ourKilled}/${ourWounded}`, 'danger');
+      this.logOp(`❌ Провал. Вызов остаётся!`, 'bad');
+      this.log(`❌ Провал: ${e.title}`, 'danger');
       this.toast('Провал! Событие осталось', 'danger');
+      this.addSMI('negative', 'Провал операции',
+        `Группа «${g.name}» не справилась с задачей на ${e.addr}`,
+        'Репутация -5');
     }
 
     this.showOpResult(e, { success, ourKilled, ourWounded, enemyKilled, enemyWounded });
@@ -956,19 +1218,23 @@ Object.assign(Game, {
     this.renderStaff();
     this.renderGroups();
     this.renderArchive();
+    this.renderSMI();
+    this.renderShop();
     this.updateStats();
     this.autoSave();
   },
 
-  async goSelf(eventId) {
+  // ============ ЛИЧНЫЙ ВЫЕЗД ============
+  async goSelf(eventId, equipBonus = 0, transport = null) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
     const opLog = document.getElementById('op-log');
     opLog.innerHTML = '';
 
-    this.logOp(`🚗 Полковник выехал лично`, 'system');
+    const tName = transport ? `${transport.icon} ${transport.name}` : '🚙 УАЗ';
+    this.logOp(`🚗 Полковник выехал на ${tName}`, 'system');
     await this.sleep(OP_STEP_MS);
-    this.logOp(`📻 «Прибыл на место. Оцениваю обстановку»`, 'info');
+    this.logOp(`📻 «Прибыл. Оцениваю обстановку»`, 'info');
     await this.sleep(OP_STEP_MS);
     this.logOp(`👁 Преступников: ${e.criminals}`, 'warn');
     await this.sleep(OP_STEP_MS);
@@ -977,7 +1243,10 @@ Object.assign(Game, {
     this.logOp(`💥 Бой!`, 'bad');
     await this.sleep(OP_STEP_MS);
 
-    const success = chance(0.65);
+    let successChance = 0.55 + equipBonus;
+    if (transport && transport.armor > 0) successChance += transport.armor / 200;
+    const success = chance(Math.min(0.95, successChance));
+
     let ourKilled = 0, ourWounded = 0, enemyKilled = 0, enemyWounded = 0;
 
     if (success) {
@@ -986,20 +1255,20 @@ Object.assign(Game, {
       ourWounded = chance(0.3) ? 1 : 0;
       this.logOp(`✅ Преступники нейтрализованы`, 'good');
       this.logOp(`📊 Убито: ${enemyKilled}, ранено: ${enemyWounded}`, 'info');
-      if (ourWounded) this.logOp(`🏥 Полковник ранен`, 'warn');
 
       e.status = 'archived';
       State.money += 15000;
       State.reputation += 5;
       State.myExp += 80;
-      this.logOp(`💰 +15 000₽ · ⭐ +5 репутации → в архив`, 'good');
+      this.logOp(`💰 +15 000₽ · ⭐ +5 → в архив`, 'good');
       this.log(`✅ Лично: ${e.title}`, 'success');
-      this.toast('Личный успех! +15000₽', 'success');
-
+      this.toast('Успех! +15000₽', 'success');
+      this.addSMI('positive', 'Полковник лично провёл операцию',
+        `Успех на ${e.addr}. Преступники обезврежены.`,
+        'Репутация +5');
       State.archive.push({
-        title: e.title, addr: e.addr, day: State.day,
-        group: 'Лично', success: true,
-        ourKilled, ourWounded, enemyKilled, enemyWounded
+        title: e.title, addr: e.addr, day: State.day, group: 'Лично',
+        success: true, ourKilled, ourWounded, enemyKilled, enemyWounded
       });
     } else {
       enemyKilled = rndInt(0, Math.floor(e.criminals / 2));
@@ -1011,17 +1280,22 @@ Object.assign(Game, {
       this.logOp(`❌ Провал. Вызов остаётся!`, 'bad');
       this.log(`❌ Провал лично: ${e.title}`, 'danger');
       this.toast('Провал! Событие осталось', 'danger');
+      this.addSMI('negative', 'Полковник провалил операцию',
+        `Неудача на ${e.addr}. Преступники скрылись.`,
+        'Репутация -8');
     }
 
     this.showOpResult(e, { success, ourKilled, ourWounded, enemyKilled, enemyWounded });
     this.renderEvents();
     this.renderStaff();
-    this.renderGroups();
     this.renderArchive();
+    this.renderSMI();
+    this.renderShop();
     this.updateStats();
     this.autoSave();
   },
 
+  // ============ РЕЗУЛЬТАТ ============
   showOpResult(e, r) {
     const res = document.getElementById('op-result');
     res.style.display = 'block';
@@ -1055,12 +1329,260 @@ Object.assign(Game, {
   }
 });
 // ============================================================
-//  ПОЛКОВНИК — game.js — ЧАСТЬ 4/4
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 4/5
+//  Магазин, склад, СМИ, взятки
+// ============================================================
+
+const SHOP_ITEMS = [
+  { id: 'pistol',    icon: '🔫', name: 'Пистолет ПМ',      desc: 'Стандартное оружие',       price: 15000 },
+  { id: 'ak',        icon: '🔫', name: 'АК-74',            desc: 'Автомат, +10% к успеху',    price: 60000 },
+  { id: 'sniper',    icon: '🎯', name: 'СВД',              desc: 'Снайперка, +15%',           price: 120000 },
+  { id: 'ammo',      icon: '📦', name: 'Патроны (100 шт)', desc: 'Боеприпасы для операций',   price: 5000 },
+  { id: 'grenade',   icon: '💣', name: 'Граната Ф-1',      desc: '+5% к успеху',              price: 8000 },
+  { id: 'smoke',     icon: '💨', name: 'Дымовая шашка',    desc: '+5% к успеху',              price: 3000 },
+  { id: 'armor',     icon: '🛡️', name: 'Бронежилет',       desc: '−30% к ранению',            price: 35000 },
+  { id: 'helmet',    icon: '⛑️', name: 'Шлем «Альфа»',     desc: '−20% к ранению',            price: 25000 },
+  { id: 'medkit',    icon: '💊', name: 'Аптечка',          desc: 'Автолечение 1 бойца',       price: 12000 },
+  { id: 'drone',     icon: '🛸', name: 'Дрон-разведчик',   desc: '+10% к успеху',             price: 80000 },
+  { id: 'flashbang', icon: '⚡', name: 'Светошумовая',      desc: '+7% к успеху',              price: 6000 },
+  { id: 'vest',      icon: '🎽', name: 'Разгрузка',        desc: 'Больше боеприпасов',        price: 18000 }
+];
+
+Object.assign(Game, {
+
+  // МАГАЗИН
+  renderShop() {
+    const el = document.getElementById('shop-list');
+    const moneyEl = document.getElementById('shop-money');
+    if (!el) return;
+    if (moneyEl) moneyEl.textContent = formatMoney(State.money);
+
+    el.innerHTML = SHOP_ITEMS.map(item => {
+      const canBuy = State.money >= item.price;
+      const count = State.inventory[item.id] || 0;
+      return `
+        <div class="shop-card">
+          <div class="sc-icon">${item.icon}</div>
+          <div class="sc-info">
+            <div class="sc-name">${item.name}${count > 0 ? ` <span style="color:#58a6ff;font-size:11px">×${count}</span>` : ''}</div>
+            <div class="sc-desc">${item.desc}</div>
+            <div class="sc-price">💰 ${formatMoney(item.price)}</div>
+          </div>
+          <button class="sc-buy ${canBuy ? '' : 'disabled'}"
+            onclick="Game.buyItem('${item.id}')" ${canBuy ? '' : 'disabled'}>
+            Купить
+          </button>
+        </div>
+      `;
+    }).join('');
+    this.renderInventory();
+  },
+
+  buyItem(itemId) {
+    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    if (!item) return;
+    if (State.money < item.price) return this.toast('Недостаточно денег', 'danger');
+    State.money -= item.price;
+    if (!State.inventory) State.inventory = {};
+    State.inventory[itemId] = (State.inventory[itemId] || 0) + 1;
+    this.log(`🛒 Куплено: ${item.name}`, 'success');
+    this.toast(`Куплено: ${item.name}`, 'success');
+    this.renderShop();
+    this.updateStats();
+    this.autoSave();
+  },
+
+  renderInventory() {
+    const el = document.getElementById('inventory-list');
+    if (!el) return;
+    if (!State.inventory || Object.keys(State.inventory).length === 0) {
+      el.innerHTML = '<p class="placeholder">Склад пуст</p>';
+      return;
+    }
+    el.innerHTML = Object.entries(State.inventory).map(([id, count]) => {
+      const item = SHOP_ITEMS.find(i => i.id === id);
+      if (!item) return '';
+      return `
+        <div class="inventory-item">
+          <div class="inv-icon">${item.icon}</div>
+          <div class="inv-name">${item.name}</div>
+          <div class="inv-count">×${count}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // СМИ
+  addSMI(type, title, text, effect) {
+    if (!State.smi) State.smi = [];
+    State.smi.unshift({
+      id: Date.now(),
+      type, title, text, effect,
+      day: State.day
+    });
+    if (State.smi.length > 30) State.smi.pop();
+  },
+
+  renderSMI() {
+    const el = document.getElementById('smi-list');
+    if (!el) return;
+    if (!State.smi || State.smi.length === 0) {
+      el.innerHTML = '<p class="placeholder">Пока тихо... Пресса ещё не заметила вас</p>';
+      return;
+    }
+    el.innerHTML = State.smi.map(s => `
+      <div class="smi-card ${s.type}">
+        <div class="smi-head">
+          <span>📅 День ${s.day}</span>
+          <span>${s.type === 'positive' ? '🟢 Позитив' : '🔴 Негатив'}</span>
+        </div>
+        <div class="smi-title">${s.title}</div>
+        <div class="smi-text">${s.text}</div>
+        <div class="smi-effect">${s.effect}</div>
+      </div>
+    `).join('');
+  },
+
+  // ВЗЯТКИ
+  generateBribe() {
+    if (!State.org || State.bribe) return;
+    const amount = rndInt(50, 200) * 1000;
+    const crimes = ['Терроризм','Убийство','Наркоторговля','Похищение','Разбойное нападение','Контрабанда'];
+    const crime = rnd(crimes);
+    const suspect = fullName(chance(0.9) ? 'М' : 'Ж');
+
+    State.bribe = { amount, crime, suspect };
+
+    const overlay = document.createElement('div');
+    overlay.className = 'bribe-overlay';
+    overlay.id = 'bribe-overlay';
+    overlay.innerHTML = `
+      <div class="bribe-panel">
+        <h2>💰 ПРЕДЛОЖЕНИЕ</h2>
+        <div class="b-text">
+          Поступило анонимное предложение.<br><br>
+          <b>${suspect}</b> обвиняется по статье «${crime}».<br><br>
+          За закрытие дела предлагают <b style="color:#ffdd99">${formatMoney(amount)}</b>.
+        </div>
+        <div class="b-actions">
+          <button class="b-btn reject" onclick="Game.rejectBribe()">❌ Отказать</button>
+          <button class="b-btn accept" onclick="Game.acceptBribe()">💰 Взять</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  },
+
+  acceptBribe() {
+    if (!State.bribe) return;
+    const amount = State.bribe.amount;
+    State.money += amount;
+    State.reputation -= 10;
+    const exposureChance = 0.25;
+    this.log(`💰 Взята взятка: +${formatMoney(amount)}. Репутация -10`, 'warn');
+    this.toast(`Взято ${formatMoney(amount)}`, 'warn');
+    this.addSMI('negative', 'Слухи о коррупции',
+      `Поговаривают, что полковник ${State.org === 'FSB' ? 'ФСБ' : 'МВД'} закрывает дела за деньги.`,
+      'Репутация -10');
+
+    if (chance(exposureChance)) {
+      const fine = rndInt(100, 300) * 1000;
+      State.money -= fine;
+      State.reputation -= 15;
+      this.log(`🕵️ ОСБ раскрыло взятку! Штраф: ${formatMoney(fine)}`, 'danger');
+      this.toast(`Проверка ОСБ! Штраф ${formatMoney(fine)}`, 'danger');
+      this.addSMI('negative', 'Скандал в ведомстве',
+        `ОСБ выявило факт взяточничества. Полковник оштрафован на ${formatMoney(fine)}.`,
+        'Репутация -15');
+    }
+
+    State.bribe = null;
+    document.getElementById('bribe-overlay').remove();
+    this.updateStats();
+    this.renderSMI();
+    this.autoSave();
+  },
+
+  rejectBribe() {
+    State.reputation += 3;
+    this.log(`✅ Взятка отклонена. Репутация +3`, 'success');
+    this.toast('Отказано', 'success');
+    this.addSMI('positive', 'Принципиальный полковник',
+      `Полковник отказался от взятки, показав пример честности.`,
+      'Репутация +3');
+    State.bribe = null;
+    document.getElementById('bribe-overlay').remove();
+    this.updateStats();
+    this.renderSMI();
+    this.autoSave();
+  },
+
+  // ОРГАНИЗАЦИЯ
+  showOrgInfo() {
+    if (!State.org) return;
+    const isFSB = State.org === 'FSB';
+    const info = isFSB ? {
+      name: '🚨 ФСБ России',
+      full: 'Федеральная служба безопасности',
+      founded: '3 апреля 1995',
+      motto: 'Защита государственной безопасности',
+      tasks: ['Контрразведка', 'Антитеррор', 'Борьба со шпионажем', 'Кибербезопасность', 'Защита VIP'],
+      weapons: 'АК-74, СВД, ПМ, спецсредства',
+      salary: 'Высокие оклады + премии',
+      perks: ['Прослушка', 'Дроны', 'Доступ к секретам']
+    } : {
+      name: '🚨 МВД России',
+      full: 'Министерство внутренних дел',
+      founded: '8 сентября 1802',
+      motto: 'Служим закону и народу',
+      tasks: ['Розыск', 'Патрули', 'Борьба с преступностью', 'Облавы', 'Работа с населением'],
+      weapons: 'ПМ, АК, СОБР-экипировка',
+      salary: 'Средние оклады + надбавки',
+      perks: ['Большой бюджет', 'ППС и СОБР', 'Массовые операции']
+    };
+
+    const overlay = document.createElement('div');
+    overlay.className = 'org-info-overlay';
+    overlay.id = 'org-info-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) Game.closeOrgInfo(); };
+
+    overlay.innerHTML = `
+      <div class="org-info-panel">
+        <h2>${info.name}</h2>
+        <div class="oi-row"><span>Полное название:</span><b>${info.full}</b></div>
+        <div class="oi-row"><span>Основано:</span><b>${info.founded}</b></div>
+        <div class="oi-row"><span>Девиз:</span><b>${info.motto}</b></div>
+        <div class="oi-row"><span>Оружие:</span><b>${info.weapons}</b></div>
+        <div class="oi-row"><span>Оклад:</span><b>${info.salary}</b></div>
+        <div class="oi-row"><span>Ваше звание:</span><b>${State.myRank}</b></div>
+        <div class="oi-row"><span>Личный состав:</span><b>${State.staff.length} чел.</b></div>
+        <div class="oi-row"><span>Бюджет:</span><b>${formatMoney(State.money)}</b></div>
+        <div class="oi-text">
+          <b>Основные задачи:</b><br>
+          ${info.tasks.map(t => '• ' + t).join('<br>')}
+        </div>
+        <div class="oi-text">
+          <b>Преимущества:</b><br>
+          ${info.perks.map(p => '✅ ' + p).join('<br>')}
+        </div>
+        <button class="oi-close" onclick="Game.closeOrgInfo()">ЗАКРЫТЬ</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  },
+
+  closeOrgInfo() {
+    const o = document.getElementById('org-info-overlay');
+    if (o) o.remove();
+  }
+});
+// ============================================================
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 5/5
+//  Админка, розыск, журнал, сейвы, запуск
 // ============================================================
 
 Object.assign(Game, {
 
-  // АДМИН-ПАНЕЛЬ
   openAdmin() {
     const overlay = document.createElement('div');
     overlay.className = 'admin-overlay';
@@ -1070,14 +1592,17 @@ Object.assign(Game, {
     overlay.innerHTML = `
       <div class="admin-panel">
         <h2>🟥 АДМИН ПАНЕЛЬ</h2>
-        <p class="a-hint">Введите пароль для доступа:</p>
+        <p class="a-hint">Введите пароль:</p>
         <input type="password" id="admin-pass" placeholder="Пароль" maxlength="10">
         <div id="admin-content" style="display:none">
           <div class="a-row"><span>Режим:</span><b>Полный доступ</b></div>
           <p class="a-hint" style="margin-top:12px">Выдать сотрудника:</p>
-          <input type="text" id="admin-name" placeholder="ФИО (оставь пустым = случайное)">
+          <input type="text" id="admin-name" placeholder="ФИО (пусто = случайное)">
           <select id="admin-rank"></select>
           <button class="a-btn" onclick="Game.adminAddStaff()">➕ ВЫДАТЬ СОТРУДНИКА</button>
+          <p class="a-hint" style="margin-top:12px">Выдать деньги:</p>
+          <input type="number" id="admin-money" placeholder="Сумма" value="100000">
+          <button class="a-btn" onclick="Game.adminAddMoney()">💰 ВЫДАТЬ ДЕНЬГИ</button>
         </div>
         <div id="admin-error" class="a-error" style="display:none"></div>
         <button class="a-btn" id="admin-login-btn" onclick="Game.adminLogin()">ВОЙТИ</button>
@@ -1099,7 +1624,6 @@ Object.assign(Game, {
     document.getElementById('admin-content').style.display = 'block';
     document.getElementById('admin-login-btn').style.display = 'none';
     document.getElementById('admin-pass').style.display = 'none';
-    // заполнить ранг-селект
     const sel = document.getElementById('admin-rank');
     const myIdx = this.getMyRankIndex();
     sel.innerHTML = RANKS[State.org].slice(0, myIdx).map(r =>
@@ -1111,11 +1635,9 @@ Object.assign(Game, {
     const nameInp = document.getElementById('admin-name').value.trim();
     const rank = document.getElementById('admin-rank').value;
     if (!rank) return this.toast('Выберите звание', 'warn');
-
     const gender = chance(0.9) ? 'М' : 'Ж';
     const name = nameInp || fullName(gender);
     const age = rndInt(21, 45);
-
     const s = {
       id: State.nextStaffId++,
       gender, name, age,
@@ -1123,20 +1645,31 @@ Object.assign(Game, {
       passport: { number: genPassportNumber(), city: rnd(CITIES), criminal: false, debts: false },
       medical: { healthy: true, issue: 'Здоров', psych: rndInt(70, 100) },
       military: { served: true, category: 'А', hotSpots: false, hotspot: '—' },
-      experience: { years: rndInt(3, 15), lastJob: rnd(PRIOR_JOBS), fired: false },
+      experience: { years: rndInt(3, 15), lastJob: 'Армия', fired: false },
       skills: { loyalty: 90, corruption: 0, bravery: 80, intellect: 80, stamina: 80 },
       rank: rank,
       exp: 0, health: 100, fatigue: 0,
       salary: rndInt(30000, 60000),
-      wounded: false, healDays: 0,
+      wounded: false, healDays: 0, dying: false,
       reprimands: 0,
       hireDay: State.day
     };
     State.staff.push(s);
-    this.log(`🟥 [АДМИН] Выдан сотрудник: ${s.name} (${s.rank})`, 'success');
+    this.log(`🟥 [АДМИН] Выдан: ${s.name} (${s.rank})`, 'success');
     this.toast(`${s.name} выдан`, 'success');
     this.closeAdmin();
     this.renderStaff();
+    this.autoSave();
+  },
+
+  adminAddMoney() {
+    const amount = parseInt(document.getElementById('admin-money').value) || 0;
+    if (amount <= 0) return this.toast('Введите сумму', 'warn');
+    State.money += amount;
+    this.log(`🟥 [АДМИН] Выдано: ${formatMoney(amount)}`, 'success');
+    this.toast(`+${formatMoney(amount)}`, 'success');
+    this.closeAdmin();
+    this.updateStats();
     this.autoSave();
   },
 
@@ -1172,7 +1705,7 @@ Object.assign(Game, {
         <div class="w-name">🔍 ${w.name}</div>
         <div class="w-crime">${w.crime}</div>
         <div class="w-level">${w.level} розыск</div>
-        <button class="btn small primary" onclick="Game.openWanted(${w.id})">🚔 Отправить на задержание</button>
+        <button class="btn small primary" onclick="Game.openWanted(${w.id})">🚔 Отправить</button>
       </div>`).join('');
   },
 
@@ -1249,16 +1782,15 @@ Object.assign(Game, {
       <div class="oi-row"><span>👤 Объект:</span><b>${w.name}</b></div>
       <div class="oi-row"><span>⚖️ Преступление:</span><b>${w.crime}</b></div>
       <div class="oi-row"><span>👥 Отправлено:</span><b>${fighters.length} чел.</b></div>
-      <div class="oi-row"><span>🎯 Состав:</span><b>${fighters.map(s => s.name.split(' ')[0]).join(', ')}</b></div>
     `;
     document.getElementById('op-log').innerHTML = '';
     document.getElementById('op-result').style.display = 'none';
 
-    this.logOp(`🚔 Отправлено ${fighters.length} чел. на задержание ${w.name}`, 'system');
+    this.logOp(`🚔 Отправлено ${fighters.length} чел.`, 'system');
     await this.sleep(OP_STEP_MS);
-    this.logOp(`📻 «Прибыли по адресу. Ищем объект»`, 'info');
+    this.logOp(`📻 «Прибыли по адресу»`, 'info');
     await this.sleep(OP_STEP_MS);
-    this.logOp(`👁 Объект обнаружен, начинаем преследование`, 'warn');
+    this.logOp(`👁 Объект обнаружен, преследование`, 'warn');
     await this.sleep(OP_STEP_MS);
     this.logOp(`🏃 Погоня!`, 'bad');
     await this.sleep(OP_STEP_MS);
@@ -1266,9 +1798,7 @@ Object.assign(Game, {
     await this.sleep(OP_STEP_MS);
 
     const avgBravery = fighters.reduce((a, s) => a + s.skills.bravery, 0) / fighters.length;
-    const successChance = 0.55 + avgBravery / 400;
-    const success = chance(successChance);
-
+    const success = chance(0.55 + avgBravery / 400);
     let ourWounded = 0;
 
     if (success) {
@@ -1279,10 +1809,9 @@ Object.assign(Game, {
         s.health = rndInt(30, 60);
         s.wounded = true;
         s.healDays = rndInt(1, 3);
-        this.logOp(`🏥 ${s.name} получил травму (${s.healDays} дн.)`, 'warn');
+        this.logOp(`🏥 ${s.name} травмирован`, 'warn');
       }
-      this.logOp(`📊 Задержан: ${w.name}`, 'info');
-      this.logOp(`💰 +30 000₽ · ⭐ +4 репутации`, 'good');
+      this.logOp(`💰 +30 000₽ · ⭐ +4`, 'good');
 
       State.wanted = State.wanted.filter(x => x.id !== w.id);
       State.money += 30000;
@@ -1291,25 +1820,26 @@ Object.assign(Game, {
       this.log(`🚔 Задержан: ${w.name}`, 'success');
       this.toast(`${w.name} задержан`, 'success');
 
+      this.addSMI('positive', 'Задержание преступника',
+        `${w.name}, обвиняемый по статье «${w.crime}», задержан.`,
+        'Репутация +4');
+
       State.archive.push({
         title: `Задержание: ${w.name}`, addr: w.crime, day: State.day,
         group: 'Группа ' + fighters.length + ' чел.', success: true,
         ourKilled: 0, ourWounded, enemyKilled: 0, enemyWounded: 1
       });
 
-      this.showOpResult(tempEvent, {
-        success: true, ourKilled: 0, ourWounded,
-        enemyKilled: 0, enemyWounded: 1
-      });
+      this.showOpResult(tempEvent, { success: true, ourKilled: 0, ourWounded, enemyKilled: 0, enemyWounded: 1 });
     } else {
       this.logOp(`❌ Объект скрылся!`, 'bad');
       this.log(`❌ ${w.name} скрылся`, 'danger');
       this.toast('Не удалось задержать', 'danger');
-
-      this.showOpResult(tempEvent, {
-        success: false, ourKilled: 0, ourWounded: 0,
-        enemyKilled: 0, enemyWounded: 0
-      });
+      this.addSMI('negative', 'Побег преступника',
+        `${w.name} скрылся от задержания.`,
+        'Репутация -3');
+      State.reputation -= 3;
+      this.showOpResult(tempEvent, { success: false, ourKilled: 0, ourWounded: 0, enemyKilled: 0, enemyWounded: 0 });
     }
 
     State.selectedTeam = [];
@@ -1317,6 +1847,7 @@ Object.assign(Game, {
     this.renderStaff();
     this.renderGroups();
     this.renderArchive();
+    this.renderSMI();
     this.updateStats();
     this.autoSave();
   },
@@ -1360,7 +1891,7 @@ Object.assign(Game, {
     try {
       const data = { version: SAVE_VERSION, state: {
         ...State,
-        _eventTimer: null, _candTimer: null
+        _eventTimer: null, _candTimer: null, _bribeTimer: null, bribe: null
       }, savedAt: new Date().toISOString() };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (e) { console.warn('Ошибка автосейва:', e); }
@@ -1387,6 +1918,9 @@ Object.assign(Game, {
     this.renderGroups();
     this.renderStaffPicker();
     this.renderEvents();
+    this.renderShop();
+    this.renderTransport();
+    this.renderSMI();
     this.renderWanted();
     this.renderArchive();
     this.renderLog();
