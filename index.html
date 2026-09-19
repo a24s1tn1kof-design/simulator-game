@@ -47,6 +47,7 @@
       <span title="Репутация">⭐ <b id="stat-rep">0</b></span>
       <span title="Сотрудники">👥 <b id="stat-staff">0</b></span>
       <span title="Раненые">🏥 <b id="stat-hospital">0</b></span>
+      <button class="btn-admin" onclick="Game.openAdmin()">🟥 Админ</button>
     </div>
   </header>
 
@@ -60,7 +61,6 @@
     <button class="tab" data-tab="log">📜 Журнал</button>
   </nav>
 
-  <!-- КАДРЫ -->
   <section id="tab-hr" class="tab-content active">
     <div class="panel" id="candidates-panel">
       <div class="panel-header">
@@ -106,7 +106,6 @@
     </div>
   </section>
 
-  <!-- БОЛЬНИЧНЫЙ -->
   <section id="tab-hospital" class="tab-content">
     <div class="panel">
       <div class="panel-header">
@@ -122,7 +121,6 @@
     </div>
   </section>
 
-  <!-- ГРУППЫ -->
   <section id="tab-groups" class="tab-content">
     <div class="panel">
       <h2>➕ Создать группу</h2>
@@ -142,9 +140,9 @@
                oninput="Game.previewIcon(this.value)">
       </div>
       <div id="icon-preview" style="margin-top:8px"></div>
-      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Состав:</h3>
+      <h3 style="color:#f0f6fc;font-size:14px;margin:14px 0 8px 0">Состав (свободные):</h3>
       <div id="group-staff-picker" class="staff-picker">
-        <p class="placeholder">Нет сотрудников</p>
+        <p class="placeholder">Нет свободных сотрудников</p>
       </div>
       <button class="btn primary" style="margin-top:10px;width:100%" onclick="Game.createGroup()">➕ Создать группу</button>
     </div>
@@ -157,7 +155,6 @@
     </div>
   </section>
 
-  <!-- ОПЕРАЦИИ -->
   <section id="tab-ops" class="tab-content">
     <div class="panel">
       <h2>🚨 Активные вызовы</h2>
@@ -177,7 +174,6 @@
     </div>
   </section>
 
-  <!-- АРХИВ -->
   <section id="tab-archive" class="tab-content">
     <div class="panel">
       <h2>📦 Архив успешных операций</h2>
@@ -187,7 +183,6 @@
     </div>
   </section>
 
-  <!-- РОЗЫСК -->
   <section id="tab-wanted" class="tab-content">
     <div class="panel">
       <h2>🔍 Объявить в розыск</h2>
@@ -226,7 +221,6 @@
     </div>
   </section>
 
-  <!-- ЖУРНАЛ -->
   <section id="tab-log" class="tab-content">
     <div class="panel">
       <h2>📜 Журнал</h2>
@@ -238,4 +232,4 @@
 <script src="ranks.js"></script>
 <script src="game.js"></script>
 </body>
-          </html>
+  </html>
