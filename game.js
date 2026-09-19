@@ -1,92 +1,30 @@
 // ============================================================
-//  ПОЛКОВНИК — game.js — Часть 1/4
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 1/4
 //  Ядро, состояние, утилиты, инициализация, кадры
 // ============================================================
 
-// ============ КОНСТАНТЫ ============
 const SAVE_KEY = 'polkovnik_save_v3';
 const SAVE_VERSION = 3;
 const HEAL_PER_DAY = 15;
 const HEAL_COST = 10000;
 
-// ============ СОСТОЯНИЕ ИГРЫ ============
 const State = {
-  org: null,
-  myRank: 'Полковник',
-  myExp: 0,
-  money: 100000,
-  reputation: 50,
-  day: 1,
-  staff: [],
-  groups: [],
-  events: [],
-  wanted: [],
-  log: [],
-  candidates: [],
-  currentCandId: null,
-  selectedStaff: [],
-  nextStaffId: 1,
-  nextGroupId: 1,
-  nextEventId: 1,
-  nextWantedId: 1
+  org: null, myRank: 'Полковник', myExp: 0, money: 100000, reputation: 50,
+  day: 1, staff: [], groups: [], events: [], wanted: [], log: [],
+  candidates: [], currentCandId: null, selectedStaff: [],
+  nextStaffId: 1, nextGroupId: 1, nextEventId: 1, nextWantedId: 1
 };
 
-// ============ ДАННЫЕ ДЛЯ ГЕНЕРАЦИИ ============
-const FIRST_NAMES_M = [
-  'Александр','Дмитрий','Сергей','Андрей','Иван','Максим','Николай',
-  'Владимир','Егор','Артём','Кирилл','Роман','Павел','Денис','Антон',
-  'Виктор','Олег','Игорь','Юрий','Константин','Григорий','Тимур',
-  'Руслан','Валерий','Станислав','Борис','Геннадий','Аркадий','Леонид',
-  'Пётр','Василий','Степан','Фёдор','Матвей','Никита','Арсений'
-];
+const FIRST_NAMES_M = ['Александр','Дмитрий','Сергей','Андрей','Иван','Максим','Николай','Владимир','Егор','Артём','Кирилл','Роман','Павел','Денис','Антон','Виктор','Олег','Игорь','Юрий','Константин','Григорий','Тимур','Руслан','Валерий','Станислав','Борис','Геннадий','Аркадий','Леонид','Пётр','Василий','Степан','Фёдор','Матвей','Никита','Арсений'];
+const FIRST_NAMES_F = ['Анна','Мария','Ольга','Екатерина','Татьяна','Светлана','Ирина','Наталья','Юлия','Виктория','Елена','Дарья','Алиса','Полина','Ксения'];
+const LAST_NAMES = ['Иванов','Петров','Смирнов','Кузнецов','Соколов','Попов','Лебедев','Козлов','Новиков','Морозов','Волков','Соловьёв','Васильев','Зайцев','Павлов','Семёнов','Голубев','Виноградов','Богданов','Воробьёв','Фёдоров','Михайлов','Беляев','Тарасов','Белов','Комаров','Орлов','Киселёв','Макаров','Андреев','Ковалёв','Ильин','Гусев','Титов','Кузьмин'];
+const CITIES = ['Москва','Санкт-Петербург','Казань','Новосибирск','Екатеринбург','Самара','Омск','Ростов-на-Дону','Уфа','Красноярск','Воронеж','Пермь','Волгоград','Краснодар','Саратов','Тюмень'];
+const CRIMES = ['Терроризм','Захват заложников','Вооружённое ограбление','Убийство','Угон','Наркоторговля','Мошенничество','Контрабанда','Похищение','Разбойное нападение','Поджог','Взрыв','Стрельба в людном месте','Захват автобуса'];
+const STREETS = ['ул. Ленина','пр. Мира','ул. Гагарина','ул. Советская','пр. Победы','ул. Кирова','ул. Пушкина','ул. Чехова','ул. Гоголя','ул. Тверская','ул. Арбат','пр. Ленинградский','ул. Садовая','ул. Лесная'];
+const JOBS = ['Охрана','МВД','Армия','ЧОП','Без опыта','Служба безопасности','Водитель','Строитель','Студент','Курьер','Продавец','Инженер'];
+const MED_ISSUES = ['Гипертония','Астма','Сахарный диабет','Проблемы со зрением','Плоскостопие','Сколиоз','Аллергия','Мигрень'];
+const HOTSPOT_LABELS = ['Чечня','Дагестан','Сирия','Афганистан','Таджикистан'];
 
-const FIRST_NAMES_F = [
-  'Анна','Мария','Ольга','Екатерина','Татьяна','Светлана','Ирина',
-  'Наталья','Юлия','Виктория','Елена','Дарья','Алиса','Полина','Ксения'
-];
-
-const LAST_NAMES = [
-  'Иванов','Петров','Смирнов','Кузнецов','Соколов','Попов','Лебедев',
-  'Козлов','Новиков','Морозов','Волков','Соловьёв','Васильев','Зайцев',
-  'Павлов','Семёнов','Голубев','Виноградов','Богданов','Воробьёв',
-  'Фёдоров','Михайлов','Беляев','Тарасов','Белов','Комаров','Орлов',
-  'Киселёв','Макаров','Андреев','Ковалёв','Ильин','Гусев','Титов','Кузьмин'
-];
-
-const CITIES = [
-  'Москва','Санкт-Петербург','Казань','Новосибирск','Екатеринбург',
-  'Самара','Омск','Ростов-на-Дону','Уфа','Красноярск','Воронеж','Пермь',
-  'Волгоград','Краснодар','Саратов','Тюмень'
-];
-
-const CRIMES = [
-  'Терроризм','Захват заложников','Вооружённое ограбление','Убийство',
-  'Угон','Наркоторговля','Мошенничество','Контрабанда','Похищение',
-  'Разбойное нападение','Поджог','Взрыв','Стрельба в людном месте',
-  'Захват автобуса'
-];
-
-const STREETS = [
-  'ул. Ленина','пр. Мира','ул. Гагарина','ул. Советская','пр. Победы',
-  'ул. Кирова','ул. Пушкина','ул. Чехова','ул. Гоголя','ул. Тверская',
-  'ул. Арбат','пр. Ленинградский','ул. Садовая','ул. Лесная'
-];
-
-const JOBS = [
-  'Охрана','МВД','Армия','ЧОП','Без опыта','Служба безопасности',
-  'Водитель','Строитель','Студент','Курьер','Продавец','Инженер'
-];
-
-const MED_ISSUES = [
-  'Гипертония','Астма','Сахарный диабет','Проблемы со зрением',
-  'Плоскостопие','Сколиоз','Аллергия','Мигрень'
-];
-
-const HOTSPOT_LABELS = [
-  'Чечня','Дагестан','Сирия','Афганистан','Таджикистан'
-];
-
-// ============ УТИЛИТЫ ============
 const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const chance = (p) => Math.random() < p;
@@ -97,32 +35,43 @@ function fullName(gender) {
   const ln = rnd(LAST_NAMES) + (gender === 'М' ? '' : 'а');
   return `${ln} ${fn}`;
 }
+function formatMoney(n) { return n.toLocaleString('ru-RU') + '₽'; }
+function genPassportNumber() { return `${rndInt(10,99)} ${rndInt(10,99)} ${rndInt(100000,999999)}`; }
+function genPhone() { return `+7 (9${rndInt(10,99)}) ${rndInt(100,999)}-${rndInt(10,99)}-${rndInt(10,99)}`; }
 
-function formatMoney(n) {
-  return n.toLocaleString('ru-RU') + '₽';
-}
-
-function genPassportNumber() {
-  return `${rndInt(10,99)} ${rndInt(10,99)} ${rndInt(100000,999999)}`;
-}
-
-function genPhone() {
-  return `+7 (9${rndInt(10,99)}) ${rndInt(100,999)}-${rndInt(10,99)}-${rndInt(10,99)}`;
-}
-
-// ============ ГЛАВНЫЙ ОБЪЕКТ ============
 const Game = {
 
-  // ----------------------------------------
-  //  ИНИЦИАЛИЗАЦИЯ
-  // ----------------------------------------
+  // ---------- ИНИЦИАЛИЗАЦИЯ ----------
   init() {
     this.bindTabs();
     this.bindIconSelect();
-    if (localStorage.getItem(SAVE_KEY)) {
-      document.getElementById('load-slot').style.display = 'block';
-    }
     console.log('ПОЛКОВНИК: игра инициализирована');
+
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data.state && data.state.org) {
+          Object.keys(State).forEach(k => { delete State[k]; });
+          Object.assign(State, data.state);
+          if (!State.candidates) State.candidates = [];
+          if (!State.selectedStaff) State.selectedStaff = [];
+          if (State.currentCandId === undefined) State.currentCandId = null;
+
+          document.getElementById('screen-org').classList.remove('active');
+          document.getElementById('screen-org').style.display = 'none';
+          document.getElementById('screen-office').classList.add('active');
+          document.getElementById('screen-office').style.display = 'block';
+          document.getElementById('org-name').textContent =
+            State.org === 'FSB' ? '🔵 ФСБ России' : '🟢 МВД России';
+          document.getElementById('my-rank').textContent = State.myRank;
+
+          this.renderAll();
+          this.toast('💾 Прогресс восстановлен', 'success');
+          return;
+        }
+      } catch (e) { console.warn('Ошибка автозагрузки:', e); }
+    }
   },
 
   chooseOrg(org) {
@@ -134,8 +83,14 @@ const Game = {
     State.candidates = [];
     State.selectedStaff = [];
 
-    document.getElementById('screen-org').classList.remove('active');
-    document.getElementById('screen-office').classList.add('active');
+    const orgScreen = document.getElementById('screen-org');
+    const officeScreen = document.getElementById('screen-office');
+    orgScreen.classList.remove('active');
+    orgScreen.style.display = 'none';
+    officeScreen.classList.add('active');
+    officeScreen.style.display = 'block';
+    window.scrollTo(0, 0);
+
     document.getElementById('org-name').textContent =
       org === 'FSB' ? '🔵 ФСБ России' : '🟢 МВД России';
     document.getElementById('my-rank').textContent = State.myRank;
@@ -146,9 +101,6 @@ const Game = {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ВКЛАДКИ И UI
-  // ----------------------------------------
   bindTabs() {
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -184,10 +136,11 @@ const Game = {
       onerror="this.style.border='1px solid #f85149';this.style.opacity=.4">`;
   },
 
-  // ----------------------------------------
-  //  ГЕНЕРАЦИЯ КАНДИДАТА (90% М)
-  // ----------------------------------------
+  // ---------- КАНДИДАТЫ ----------
   generateCandidate() {
+    console.log('generateCandidate вызван, org =', State.org);
+    if (!State.org) return this.toast('Сначала выберите ведомство!', 'danger');
+
     const gender = chance(0.9) ? 'М' : 'Ж';
     const age = rndInt(21, 45);
     const hasCriminal = chance(0.15);
@@ -196,46 +149,17 @@ const Game = {
 
     const cand = {
       id: State.nextStaffId++,
-      gender,
-      name: fullName(gender),
-      age,
+      gender, name: fullName(gender), age,
       phone: genPhone(),
-      passport: {
-        number: genPassportNumber(),
-        city: rnd(CITIES),
-        criminal: hasCriminal,
-        debts: chance(0.25)
-      },
-      medical: {
-        healthy: !hasHealth,
-        issue: hasHealth ? rnd(MED_ISSUES) : 'Здоров',
-        psych: rndInt(60, 100)
-      },
-      military: {
-        served,
-        category: served ? rnd(['А','Б','В']) : '—',
-        hotSpots: served && chance(0.2),
-        hotspot: served ? rnd(HOTSPOT_LABELS) : '—'
-      },
-      experience: {
-        years: rndInt(0, 15),
-        lastJob: rnd(JOBS),
-        fired: chance(0.2)
-      },
-      skills: {
-        loyalty: rndInt(40,95),
-        corruption: rndInt(0,40),
-        bravery: rndInt(30,95),
-        intellect: rndInt(40,95),
-        stamina: rndInt(50,95)
-      },
+      passport: { number: genPassportNumber(), city: rnd(CITIES), criminal: hasCriminal, debts: chance(0.25) },
+      medical: { healthy: !hasHealth, issue: hasHealth ? rnd(MED_ISSUES) : 'Здоров', psych: rndInt(60, 100) },
+      military: { served, category: served ? rnd(['А','Б','В']) : '—', hotSpots: served && chance(0.2), hotspot: served ? rnd(HOTSPOT_LABELS) : '—' },
+      experience: { years: rndInt(0, 15), lastJob: rnd(JOBS), fired: chance(0.2) },
+      skills: { loyalty: rndInt(40,95), corruption: rndInt(0,40), bravery: rndInt(30,95), intellect: rndInt(40,95), stamina: rndInt(50,95) },
       rank: State.org === 'FSB' ? 'Прапорщик' : 'Рядовой',
-      exp: 0,
-      health: 100,
-      fatigue: 0,
+      exp: 0, health: 100, fatigue: 0,
       salary: rndInt(30000, 60000),
-      wounded: false,
-      healDays: 0
+      wounded: false, healDays: 0
     };
 
     State.candidates.push(cand);
@@ -245,9 +169,6 @@ const Game = {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  СПИСОК КАНДИДАТОВ
-  // ----------------------------------------
   renderCandidates() {
     const list = document.getElementById('candidates-list');
     const counter = document.getElementById('candidates-count');
@@ -271,9 +192,6 @@ const Game = {
     `).join('');
   },
 
-  // ----------------------------------------
-  //  КАРТОЧКА КАНДИДАТА
-  // ----------------------------------------
   openCandidate(id) {
     const c = State.candidates.find(x => x.id === id);
     if (!c) return;
@@ -281,13 +199,11 @@ const Game = {
 
     document.getElementById('candidates-panel').style.display = 'none';
     document.getElementById('candidate-detail').style.display = 'block';
-
     document.getElementById('cand-photo').textContent = c.gender === 'М' ? '👨' : '👩';
     document.getElementById('cand-name').textContent = c.name;
     document.getElementById('cand-sub').textContent =
       `${c.age} лет · ${c.experience.lastJob} · ${c.phone}`;
     document.getElementById('cand-detail-title').textContent = `Кандидат: ${c.name}`;
-
     document.getElementById('doc-view').innerHTML =
       '<p class="placeholder">Выберите документ для просмотра</p>';
   },
@@ -298,9 +214,6 @@ const Game = {
     document.getElementById('candidate-detail').style.display = 'none';
   },
 
-  // ----------------------------------------
-  //  ПОКАЗ ДОКУМЕНТОВ
-  // ----------------------------------------
   showDoc(type) {
     const c = State.candidates.find(x => x.id === State.currentCandId);
     if (!c) return;
@@ -314,44 +227,29 @@ const Game = {
         <div class="doc-row"><span>Возраст:</span><b>${c.age}</b></div>
         <div class="doc-row"><span>Серия/номер:</span><b>${c.passport.number}</b></div>
         <div class="doc-row"><span>Город:</span><b>${c.passport.city}</b></div>
-        <div class="doc-row"><span>Судимости:</span>
-          <b class="${c.passport.criminal ? 'doc-bad' : 'doc-good'}">${c.passport.criminal ? '⚠ ЕСТЬ' : 'Нет'}</b></div>
-        <div class="doc-row"><span>Долги:</span>
-          <b class="${c.passport.debts ? 'doc-warn' : 'doc-good'}">${c.passport.debts ? '⚠ Есть' : 'Нет'}</b></div>
-      `;
+        <div class="doc-row"><span>Судимости:</span><b class="${c.passport.criminal ? 'doc-bad' : 'doc-good'}">${c.passport.criminal ? '⚠ ЕСТЬ' : 'Нет'}</b></div>
+        <div class="doc-row"><span>Долги:</span><b class="${c.passport.debts ? 'doc-warn' : 'doc-good'}">${c.passport.debts ? '⚠ Есть' : 'Нет'}</b></div>`;
     } else if (type === 'medical') {
       view.innerHTML = `
-        <div class="doc-title">🩺 Медицинская карта</div>
-        <div class="doc-row"><span>Общее состояние:</span>
-          <b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Здоров' : c.medical.issue}</b></div>
-        <div class="doc-row"><span>Психика:</span>
-          <b class="${c.medical.psych > 80 ? 'doc-good' : c.medical.psych > 60 ? 'doc-warn' : 'doc-bad'}">${c.medical.psych}/100</b></div>
-        <div class="doc-row"><span>Допуск к службе:</span>
-          <b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Разрешён' : 'Ограничен'}</b></div>
-      `;
+        <div class="doc-title">🩺 Медкарта</div>
+        <div class="doc-row"><span>Состояние:</span><b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Здоров' : c.medical.issue}</b></div>
+        <div class="doc-row"><span>Психика:</span><b class="${c.medical.psych > 80 ? 'doc-good' : c.medical.psych > 60 ? 'doc-warn' : 'doc-bad'}">${c.medical.psych}/100</b></div>
+        <div class="doc-row"><span>Допуск:</span><b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Разрешён' : 'Ограничен'}</b></div>`;
     } else if (type === 'military') {
       view.innerHTML = `
-        <div class="doc-title">🎖️ Военный билет</div>
-        <div class="doc-row"><span>Служба:</span>
-          <b class="${c.military.served ? 'doc-good' : 'doc-bad'}">${c.military.served ? 'Проходил' : 'Не проходил'}</b></div>
+        <div class="doc-title">🎖️ Военбилет</div>
+        <div class="doc-row"><span>Служба:</span><b class="${c.military.served ? 'doc-good' : 'doc-bad'}">${c.military.served ? 'Проходил' : 'Не проходил'}</b></div>
         <div class="doc-row"><span>Категория:</span><b>${c.military.category}</b></div>
-        <div class="doc-row"><span>Горячие точки:</span>
-          <b class="${c.military.hotSpots ? 'doc-warn' : ''}">${c.military.hotSpots ? 'Да (' + c.military.hotspot + ')' : 'Нет'}</b></div>
-      `;
+        <div class="doc-row"><span>Горячие точки:</span><b class="${c.military.hotSpots ? 'doc-warn' : ''}">${c.military.hotSpots ? 'Да (' + c.military.hotspot + ')' : 'Нет'}</b></div>`;
     } else if (type === 'experience') {
       view.innerHTML = `
-        <div class="doc-title">📜 Трудовой стаж</div>
-        <div class="doc-row"><span>Лет стажа:</span><b>${c.experience.years}</b></div>
-        <div class="doc-row"><span>Последнее место:</span><b>${c.experience.lastJob}</b></div>
-        <div class="doc-row"><span>Уволен по статье:</span>
-          <b class="${c.experience.fired ? 'doc-bad' : 'doc-good'}">${c.experience.fired ? 'Да' : 'Нет'}</b></div>
-      `;
+        <div class="doc-title">📜 Стаж</div>
+        <div class="doc-row"><span>Лет:</span><b>${c.experience.years}</b></div>
+        <div class="doc-row"><span>Последнее:</span><b>${c.experience.lastJob}</b></div>
+        <div class="doc-row"><span>Уволен по статье:</span><b class="${c.experience.fired ? 'doc-bad' : 'doc-good'}">${c.experience.fired ? 'Да' : 'Нет'}</b></div>`;
     }
   },
 
-  // ----------------------------------------
-  //  НАЙМ / ОТКАЗ
-  // ----------------------------------------
   hireCurrent() {
     const c = State.candidates.find(x => x.id === State.currentCandId);
     if (!c) return;
@@ -377,21 +275,14 @@ const Game = {
     this.autoSave();
   }
 };
- // ============================================================
-//  ПОЛКОВНИК — game2.js — Часть 2/4
-//  Сотрудники, больничный, группы
+// ============================================================
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 2/4
 // ============================================================
 
 Object.assign(Game, {
 
-  // ----------------------------------------
-  //  ПОИСК СОТРУДНИКА
-  // ----------------------------------------
   findStaff(id) { return State.staff.find(s => s.id === id); },
 
-  // ----------------------------------------
-  //  СПИСОК ЛИЧНОГО СОСТАВА
-  // ----------------------------------------
   renderStaff() {
     const list = document.getElementById('staff-list');
     if (!list) return;
@@ -431,9 +322,6 @@ Object.assign(Game, {
     this.renderStaffPicker();
   },
 
-  // ----------------------------------------
-  //  БОЛЬНИЧНЫЙ
-  // ----------------------------------------
   renderHospital() {
     const wounded = State.staff.filter(s => s.wounded);
     const counter = document.getElementById('hospital-count');
@@ -464,18 +352,13 @@ Object.assign(Game, {
       </div>`).join('');
   },
 
-  // ----------------------------------------
-  //  ДЕЙСТВИЯ С СОТРУДНИКОМ
-  // ----------------------------------------
   promote(id) {
     const s = this.findStaff(id);
     if (!s) return;
     const list = RANKS[State.org];
     const idx = list.findIndex(r => r.name === s.rank);
     if (idx < 0) return;
-    if (idx >= list.length - 1) {
-      return this.toast(`${s.name} уже на максимальном звании`, 'warn');
-    }
+    if (idx >= list.length - 1) return this.toast(`${s.name} уже на максимальном звании`, 'warn');
     const old = s.rank;
     s.rank = list[idx + 1].name;
     this.log(`⬆ ${s.name}: ${old} → ${s.rank}`, 'success');
@@ -521,17 +404,12 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ЛЕЧЕНИЕ
-  // ----------------------------------------
   healFast(id) {
     const s = this.findStaff(id);
     if (!s || !s.wounded) return;
     if (State.money < HEAL_COST) return this.toast('Недостаточно средств', 'danger');
     State.money -= HEAL_COST;
-    s.health = 100;
-    s.healDays = 0;
-    s.wounded = false;
+    s.health = 100; s.healDays = 0; s.wounded = false;
     this.log(`💊 ${s.name} вылечен`, 'success');
     this.toast(`${s.name} восстановлен`, 'success');
     this.renderStaff();
@@ -551,9 +429,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  СЛЕДУЮЩИЙ ДЕНЬ
-  // ----------------------------------------
   nextDay() {
     State.day++;
     State.staff.forEach(s => {
@@ -561,15 +436,12 @@ Object.assign(Game, {
         s.health = clamp(s.health + HEAL_PER_DAY, 0, 100);
         s.healDays = Math.max(0, s.healDays - 1);
         if (s.healDays === 0 || s.health >= 100) {
-          s.health = 100;
-          s.wounded = false;
-          s.healDays = 0;
+          s.health = 100; s.wounded = false; s.healDays = 0;
           this.log(`✅ ${s.name} вернулся с больничного`, 'success');
         }
       }
       s.fatigue = Math.max(0, s.fatigue - 20);
     });
-
     const totalSalary = State.staff.reduce((sum, s) => sum + s.salary, 0);
     State.money -= totalSalary;
     this.log(`📅 День ${State.day}. Зарплаты: -${formatMoney(totalSalary)}`, 'info');
@@ -578,9 +450,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ВЫБОР СОСТАВА ДЛЯ НОВОЙ ГРУППЫ
-  // ----------------------------------------
   renderStaffPicker() {
     const picker = document.getElementById('group-staff-picker');
     if (!picker) return;
@@ -613,9 +482,6 @@ Object.assign(Game, {
     }
   },
 
-  // ----------------------------------------
-  //  СОЗДАНИЕ ГРУППЫ
-  // ----------------------------------------
   createGroup() {
     const name = document.getElementById('group-name').value.trim();
     const iconSel = document.getElementById('group-icon').value;
@@ -629,8 +495,7 @@ Object.assign(Game, {
     if (State.selectedStaff.length < 1) return this.toast('Выберите хотя бы 1 сотрудника', 'warn');
 
     const g = {
-      id: State.nextGroupId++,
-      name, icon,
+      id: State.nextGroupId++, name, icon,
       members: [...State.selectedStaff],
       custom: iconSel === '__custom'
     };
@@ -655,9 +520,6 @@ Object.assign(Game, {
     if (c) c.textContent = State.groups.length;
   },
 
-  // ----------------------------------------
-  //  СПИСОК ГРУПП
-  // ----------------------------------------
   renderGroups() {
     const el = document.getElementById('groups-list');
     if (!el) return;
@@ -694,26 +556,18 @@ Object.assign(Game, {
   }
 });
   // ============================================================
-//  ПОЛКОВНИК — game3.js — Часть 3/4
-//  Операции (пошаговый лог), розыск
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 3/4
 // ============================================================
 
 Object.assign(Game, {
 
-  // ----------------------------------------
-  //  ГЕНЕРАЦИЯ ВЫЗОВА
-  // ----------------------------------------
   generateEvent() {
     const type = rnd(CRIMES);
     const addr = `${rnd(STREETS)}, д. ${rndInt(1, 120)}`;
     const threat = chance(0.3) ? 'high' : chance(0.5) ? 'medium' : 'low';
     const e = {
-      id: State.nextEventId++,
-      title: type,
-      addr,
-      threat,
-      status: 'pending',
-      createdDay: State.day,
+      id: State.nextEventId++, title: type, addr, threat,
+      status: 'pending', createdDay: State.day,
       criminals: rndInt(2, 8)
     };
     State.events.push(e);
@@ -723,9 +577,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  СПИСОК СОБЫТИЙ
-  // ----------------------------------------
   renderEvents() {
     const el = document.getElementById('events-list');
     if (!el) return;
@@ -751,9 +602,6 @@ Object.assign(Game, {
     }).join('');
   },
 
-  // ----------------------------------------
-  //  ОКНО ОПЕРАЦИИ
-  // ----------------------------------------
   openOperation(eventId, mode) {
     const e = State.events.find(x => x.id === eventId);
     if (!e || e.status !== 'pending') return;
@@ -775,19 +623,16 @@ Object.assign(Game, {
       const picker = document.createElement('div');
       picker.className = 'groups-picker';
       picker.style.marginTop = '10px';
-
       const available = State.groups.filter(g =>
         g.members.some(id => {
           const s = this.findStaff(id);
           return s && !s.wounded;
         })
       );
-
       if (available.length === 0) {
         picker.innerHTML = '<p class="placeholder">Нет боеспособных групп</p>';
       } else {
-        picker.innerHTML =
-          `<div style="color:#8b949e;font-size:12px;margin-bottom:6px">Выберите группу:</div>` +
+        picker.innerHTML = `<div style="color:#8b949e;font-size:12px;margin-bottom:6px">Выберите группу:</div>` +
           available.map(g => {
             const alive = g.members.filter(id => {
               const s = this.findStaff(id);
@@ -817,9 +662,6 @@ Object.assign(Game, {
     State._op = null;
   },
 
-  // ----------------------------------------
-  //  ЛОГ ОПЕРАЦИИ (пошаговый)
-  // ----------------------------------------
   logOp(text, type = 'info') {
     const log = document.getElementById('op-log');
     if (!log) return;
@@ -834,9 +676,6 @@ Object.assign(Game, {
 
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
-  // ----------------------------------------
-  //  ОТПРАВКА ГРУППЫ
-  // ----------------------------------------
   async sendGroup(eventId, groupId) {
     const e = State.events.find(x => x.id === eventId);
     const g = State.groups.find(x => x.id === groupId);
@@ -845,11 +684,9 @@ Object.assign(Game, {
     const opLog = document.getElementById('op-log');
     opLog.innerHTML = '';
 
-    const fighters = g.members.map(id => this.findStaff(id))
-      .filter(s => s && !s.wounded);
+    const fighters = g.members.map(id => this.findStaff(id)).filter(s => s && !s.wounded);
     if (fighters.length === 0) return this.toast('Группа небоеспособна', 'danger');
 
-    // ====== ВЫЕЗД ======
     this.logOp(`🚔 Группа «${g.name}» выехала на задание`, 'system');
     await this.sleep(900);
     this.logOp(`📻 Связь: «Прибыли на место. Занимаем позиции»`, 'info');
@@ -859,13 +696,11 @@ Object.assign(Game, {
     this.logOp(`🚧 Оцепление выставлено. Готовимся к штурму`, 'info');
     await this.sleep(1200);
 
-    // ====== ШТУРМ ======
     this.logOp(`💥 Штурм начался!`, 'system');
     await this.sleep(1000);
     this.logOp(`🔫 Перестрелка!`, 'bad');
     await this.sleep(700);
 
-    // рассчитываем исход
     const avgBravery = fighters.reduce((a, s) => a + s.skills.bravery, 0) / fighters.length;
     const avgIntellect = fighters.reduce((a, s) => a + s.skills.intellect, 0) / fighters.length;
     const successChance = 0.5 + (avgBravery / 100) * 0.25 + (avgIntellect / 100) * 0.15;
@@ -890,8 +725,8 @@ Object.assign(Game, {
       ourWounded = rndInt(1, Math.max(1, Math.floor(fighters.length / 2)));
     }
 
-    // ранения наших
     const shuffled = [...fighters].sort(() => Math.random() - 0.5);
+
     for (let i = 0; i < ourWounded && i < shuffled.length; i++) {
       const s = shuffled[i];
       s.health = rndInt(10, 45);
@@ -902,7 +737,6 @@ Object.assign(Game, {
       await this.sleep(600);
     }
 
-    // убитые наши
     for (let i = 0; i < ourKilled && i + ourWounded < shuffled.length; i++) {
       const s = shuffled[ourWounded + i];
       this.logOp(`💀 ${s.name} погиб при исполнении`, 'bad');
@@ -913,7 +747,6 @@ Object.assign(Game, {
       await this.sleep(700);
     }
 
-    // ====== ЗАЧИСТКА ======
     this.logOp(`🛡 Зачистка завершена`, 'info');
     await this.sleep(800);
     this.logOp(`📊 Потери противника: убито ${enemyKilled}, ранено ${enemyWounded}`, 'info');
@@ -922,7 +755,6 @@ Object.assign(Game, {
       ourKilled > 0 ? 'bad' : 'info');
     await this.sleep(600);
 
-    // ====== ИТОГ ======
     if (success) {
       e.status = '✅ Успех';
       State.money += 20000;
@@ -956,9 +788,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ЛИЧНЫЙ ВЫЕЗД
-  // ----------------------------------------
   async goSelf(eventId) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
@@ -1019,9 +848,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ОКНО РЕЗУЛЬТАТА
-  // ----------------------------------------
   showOpResult(e, r) {
     const res = document.getElementById('op-result');
     res.style.display = 'block';
@@ -1038,9 +864,6 @@ Object.assign(Game, {
     `;
   },
 
-  // ----------------------------------------
-  //  ИГНОР
-  // ----------------------------------------
   ignore(eventId) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
@@ -1053,15 +876,11 @@ Object.assign(Game, {
   }
 });
 // ============================================================
-//  ПОЛКОВНИК — game4.js — Часть 4/4
-//  Розыск, журнал, статистика, сейвы, UI-утилиты
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 4/4
 // ============================================================
 
 Object.assign(Game, {
 
-  // ----------------------------------------
-  //  ДОБАВИТЬ В РОЗЫСК
-  // ----------------------------------------
   addWanted() {
     const name = document.getElementById('wanted-name').value.trim();
     const crime = document.getElementById('wanted-crime').value.trim();
@@ -1076,9 +895,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  СПИСОК РОЗЫСКА
-  // ----------------------------------------
   renderWanted() {
     const el = document.getElementById('wanted-list');
     if (!el) return;
@@ -1095,9 +911,6 @@ Object.assign(Game, {
       </div>`).join('');
   },
 
-  // ----------------------------------------
-  //  ОКНО ЗАДЕРЖАНИЯ
-  // ----------------------------------------
   openWanted(id) {
     const w = State.wanted.find(x => x.id === id);
     if (!w) return;
@@ -1142,21 +955,14 @@ Object.assign(Game, {
     State._wanted = null;
   },
 
-  // ----------------------------------------
-  //  ОТПРАВКА НА ЗАДЕРЖАНИЕ
-  // ----------------------------------------
   async sendWantedGroup(groupId) {
     const w = State.wanted.find(x => x.id === State._wanted);
     const g = State.groups.find(x => x.id === groupId);
     if (!w || !g) return;
 
     const tempEvent = {
-      id: 0,
-      title: `Задержание: ${w.name}`,
-      addr: w.crime,
-      threat: 'medium',
-      criminals: 1,
-      status: 'pending'
+      id: 0, title: `Задержание: ${w.name}`, addr: w.crime,
+      threat: 'medium', criminals: 1, status: 'pending'
     };
 
     document.getElementById('wanted-detail').style.display = 'none';
@@ -1171,8 +977,7 @@ Object.assign(Game, {
     document.getElementById('op-log').innerHTML = '';
     document.getElementById('op-result').style.display = 'none';
 
-    const fighters = g.members.map(id => this.findStaff(id))
-      .filter(s => s && !s.wounded);
+    const fighters = g.members.map(id => this.findStaff(id)).filter(s => s && !s.wounded);
 
     this.logOp(`🚔 Группа «${g.name}» выехала на задержание`, 'system');
     await this.sleep(900);
@@ -1190,7 +995,6 @@ Object.assign(Game, {
     if (success) {
       this.logOp(`✅ Объект задержан!`, 'good');
       await this.sleep(700);
-
       ourWounded = chance(0.25) ? 1 : 0;
       if (ourWounded) {
         const s = fighters[rndInt(0, fighters.length - 1)];
@@ -1200,7 +1004,6 @@ Object.assign(Game, {
         this.logOp(`🏥 ${s.name} получил травму (${s.healDays} дн.)`, 'warn');
       }
       await this.sleep(700);
-
       this.logOp(`📊 Задержан: ${w.name}`, 'info');
       this.logOp(`💰 Награда: +30 000₽ · ⭐ +4 репутации`, 'good');
 
@@ -1235,9 +1038,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ----------------------------------------
-  //  ЖУРНАЛ
-  // ----------------------------------------
   log(text, type = 'info') {
     const time = new Date().toLocaleTimeString('ru-RU');
     State.log.unshift({ time, text, type });
@@ -1253,9 +1053,6 @@ Object.assign(Game, {
     ).join('');
   },
 
-  // ----------------------------------------
-  //  СТАТИСТИКА
-  // ----------------------------------------
   updateStats() {
     const set = (id, val) => {
       const el = document.getElementById(id);
@@ -1276,56 +1073,17 @@ Object.assign(Game, {
     }
   },
 
-  // ----------------------------------------
-  //  СОХРАНЕНИЕ / ЗАГРУЗКА
-  // ----------------------------------------
   autoSave() {
     try {
-      const data = {
-        version: SAVE_VERSION,
-        state: State,
-        savedAt: new Date().toISOString()
-      };
+      const data = { version: SAVE_VERSION, state: State, savedAt: new Date().toISOString() };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-      const ls = document.getElementById('load-slot');
-      if (ls) ls.style.display = 'block';
-    } catch (e) {
-      console.warn('Ошибка автосейва:', e);
-    }
+    } catch (e) { console.warn('Ошибка автосейва:', e); }
   },
 
   loadGame() {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return this.toast('Сохранений нет', 'warn');
-      const data = JSON.parse(raw);
-      if (!data.state || !data.state.org) return this.toast('Файл повреждён', 'danger');
-
-      Object.keys(State).forEach(k => { delete State[k]; });
-      Object.assign(State, data.state);
-
-      // защита от старых сейвов
-      if (!State.candidates) State.candidates = [];
-      if (!State.selectedStaff) State.selectedStaff = [];
-      if (State.currentCandId === undefined) State.currentCandId = null;
-
-      document.getElementById('screen-org').classList.remove('active');
-      document.getElementById('screen-office').classList.add('active');
-      document.getElementById('org-name').textContent =
-        State.org === 'FSB' ? '🔵 ФСБ России' : '🟢 МВД России';
-      document.getElementById('my-rank').textContent = State.myRank;
-
-      this.renderAll();
-      this.toast('💾 Игра загружена', 'success');
-      this.log('💾 Загружено', 'success');
-    } catch (err) {
-      this.toast('Ошибка загрузки: ' + err.message, 'danger');
-    }
+    console.log('loadGame() не используется — автозагрузка в init()');
   },
 
-  // ----------------------------------------
-  //  UI-УТИЛИТЫ
-  // ----------------------------------------
   toast(msg, type = 'info') {
     let container = document.getElementById('toast');
     if (!container) {
@@ -1353,5 +1111,5 @@ Object.assign(Game, {
   }
 });
 
-// ============ ЗАПУСК ============
+// ЗАПУСК
 window.addEventListener('DOMContentLoaded', () => Game.init());
