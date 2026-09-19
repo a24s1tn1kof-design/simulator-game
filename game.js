@@ -1,25 +1,33 @@
 // ============================================================
 //  ПОЛКОВНИК — game.js — ЧАСТЬ 1/4
-//  Ядро, состояние, утилиты, инициализация, кадры
 // ============================================================
 
-const SAVE_KEY = 'polkovnik_save_v3';
-const SAVE_VERSION = 3;
+const SAVE_KEY = 'polkovnik_save_v4';
+const SAVE_VERSION = 4;
 const HEAL_PER_DAY = 15;
 const HEAL_COST = 10000;
+const MAX_REPRIMANDS = 3;
+const OP_STEP_MS = 60000;
+const EVENT_INTERVAL_MS = 90000;
+const CANDIDATE_INTERVAL_MS = 45000;
 
 const State = {
   org: null, myRank: 'Полковник', myExp: 0, money: 100000, reputation: 50,
   day: 1, staff: [], groups: [], events: [], wanted: [], log: [],
-  candidates: [], currentCandId: null, selectedStaff: [],
-  nextStaffId: 1, nextGroupId: 1, nextEventId: 1, nextWantedId: 1
+  candidates: [], currentCandId: null, selectedStaff: [], selectedTeam: [],
+  archive: [],
+  nextStaffId: 1, nextGroupId: 1, nextEventId: 1, nextWantedId: 1,
+  _eventTimer: null, _candTimer: null
 };
 
 const FIRST_NAMES_M = ['Александр','Дмитрий','Сергей','Андрей','Иван','Максим','Николай','Владимир','Егор','Артём','Кирилл','Роман','Павел','Денис','Антон','Виктор','Олег','Игорь','Юрий','Константин','Григорий','Тимур','Руслан','Валерий','Станислав','Борис','Геннадий','Аркадий','Леонид','Пётр','Василий','Степан','Фёдор','Матвей','Никита','Арсений'];
 const FIRST_NAMES_F = ['Анна','Мария','Ольга','Екатерина','Татьяна','Светлана','Ирина','Наталья','Юлия','Виктория','Елена','Дарья','Алиса','Полина','Ксения'];
 const LAST_NAMES = ['Иванов','Петров','Смирнов','Кузнецов','Соколов','Попов','Лебедев','Козлов','Новиков','Морозов','Волков','Соловьёв','Васильев','Зайцев','Павлов','Семёнов','Голубев','Виноградов','Богданов','Воробьёв','Фёдоров','Михайлов','Беляев','Тарасов','Белов','Комаров','Орлов','Киселёв','Макаров','Андреев','Ковалёв','Ильин','Гусев','Титов','Кузьмин'];
 const CITIES = ['Москва','Санкт-Петербург','Казань','Новосибирск','Екатеринбург','Самара','Омск','Ростов-на-Дону','Уфа','Красноярск','Воронеж','Пермь','Волгоград','Краснодар','Саратов','Тюмень'];
-const CRIMES = ['Терроризм','Захват заложников','Вооружённое ограбление','Убийство','Угон','Наркоторговля','Мошенничество','Контрабанда','Похищение','Разбойное нападение','Поджог','Взрыв','Стрельба в людном месте','Захват автобуса'];
+
+const MISSIONS_FSB = ['Терроризм','Захват заложников','Шпионаж','Экстремистская ячейка','Госизмена','Кибератака','Контрабанда','Похищение дипломата','Взрыв','Захват автобуса'];
+const MISSIONS_MVD = ['Угон','Кража','Разбойное нападение','Убийство','Наркоторговля','Мошенничество','Хулиганство','Массовая драка','Похищение','Поджог','Вооружённое ограбление','Стрельба'];
+
 const STREETS = ['ул. Ленина','пр. Мира','ул. Гагарина','ул. Советская','пр. Победы','ул. Кирова','ул. Пушкина','ул. Чехова','ул. Гоголя','ул. Тверская','ул. Арбат','пр. Ленинградский','ул. Садовая','ул. Лесная'];
 const JOBS = ['Охрана','МВД','Армия','ЧОП','Без опыта','Служба безопасности','Водитель','Строитель','Студент','Курьер','Продавец','Инженер'];
 const MED_ISSUES = ['Гипертония','Астма','Сахарный диабет','Проблемы со зрением','Плоскостопие','Сколиоз','Аллергия','Мигрень'];
@@ -41,11 +49,9 @@ function genPhone() { return `+7 (9${rndInt(10,99)}) ${rndInt(100,999)}-${rndInt
 
 const Game = {
 
-  // ---------- ИНИЦИАЛИЗАЦИЯ ----------
   init() {
     this.bindTabs();
     this.bindIconSelect();
-    console.log('ПОЛКОВНИК: игра инициализирована');
 
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
@@ -56,7 +62,11 @@ const Game = {
           Object.assign(State, data.state);
           if (!State.candidates) State.candidates = [];
           if (!State.selectedStaff) State.selectedStaff = [];
+          if (!State.selectedTeam) State.selectedTeam = [];
+          if (!State.archive) State.archive = [];
           if (State.currentCandId === undefined) State.currentCandId = null;
+          State._eventTimer = null;
+          State._candTimer = null;
 
           document.getElementById('screen-org').classList.remove('active');
           document.getElementById('screen-org').style.display = 'none';
@@ -67,6 +77,7 @@ const Game = {
           document.getElementById('my-rank').textContent = State.myRank;
 
           this.renderAll();
+          this.startTimers();
           this.toast('💾 Прогресс восстановлен', 'success');
           return;
         }
@@ -82,6 +93,8 @@ const Game = {
     State.reputation = org === 'FSB' ? 60 : 50;
     State.candidates = [];
     State.selectedStaff = [];
+    State.selectedTeam = [];
+    State.archive = [];
 
     const orgScreen = document.getElementById('screen-org');
     const officeScreen = document.getElementById('screen-office');
@@ -97,8 +110,22 @@ const Game = {
 
     this.log(`Вы возглавили ${org === 'FSB' ? 'ФСБ' : 'МВД'}`, 'success');
     this.renderAll();
+    this.startTimers();
     this.toast('Добро пожаловать, Полковник!', 'success');
     this.autoSave();
+  },
+
+  startTimers() {
+    if (State._eventTimer) clearInterval(State._eventTimer);
+    if (State._candTimer) clearInterval(State._candTimer);
+
+    setTimeout(() => this.generateEvent(), 20000);
+    setTimeout(() => this.generateCandidate(), 10000);
+
+    State._eventTimer = setInterval(() => this.generateEvent(), EVENT_INTERVAL_MS);
+    State._candTimer = setInterval(() => {
+      if (State.candidates.length < 6) this.generateCandidate();
+    }, CANDIDATE_INTERVAL_MS);
   },
 
   bindTabs() {
@@ -136,11 +163,8 @@ const Game = {
       onerror="this.style.border='1px solid #f85149';this.style.opacity=.4">`;
   },
 
-  // ---------- КАНДИДАТЫ ----------
   generateCandidate() {
-    console.log('generateCandidate вызван, org =', State.org);
-    if (!State.org) return this.toast('Сначала выберите ведомство!', 'danger');
-
+    if (!State.org) return;
     const gender = chance(0.9) ? 'М' : 'Ж';
     const age = rndInt(21, 45);
     const hasCriminal = chance(0.15);
@@ -159,7 +183,9 @@ const Game = {
       rank: State.org === 'FSB' ? 'Прапорщик' : 'Рядовой',
       exp: 0, health: 100, fatigue: 0,
       salary: rndInt(30000, 60000),
-      wounded: false, healDays: 0
+      wounded: false, healDays: 0,
+      reprimands: 0,
+      hireDay: State.day
     };
 
     State.candidates.push(cand);
@@ -176,10 +202,9 @@ const Game = {
     if (counter) counter.textContent = State.candidates.length;
 
     if (State.candidates.length === 0) {
-      list.innerHTML = '<p class="placeholder">Нажмите «Вызвать», чтобы пригласить кандидатов</p>';
+      list.innerHTML = '<p class="placeholder">Кандидаты приходят сами, ожидайте...</p>';
       return;
     }
-
     list.innerHTML = State.candidates.map(c => `
       <div class="cand-item" onclick="Game.openCandidate(${c.id})">
         <div class="ci-avatar">${c.gender === 'М' ? '👨' : '👩'}</div>
@@ -196,16 +221,13 @@ const Game = {
     const c = State.candidates.find(x => x.id === id);
     if (!c) return;
     State.currentCandId = id;
-
     document.getElementById('candidates-panel').style.display = 'none';
     document.getElementById('candidate-detail').style.display = 'block';
     document.getElementById('cand-photo').textContent = c.gender === 'М' ? '👨' : '👩';
     document.getElementById('cand-name').textContent = c.name;
-    document.getElementById('cand-sub').textContent =
-      `${c.age} лет · ${c.experience.lastJob} · ${c.phone}`;
+    document.getElementById('cand-sub').textContent = `${c.age} лет · ${c.experience.lastJob} · ${c.phone}`;
     document.getElementById('cand-detail-title').textContent = `Кандидат: ${c.name}`;
-    document.getElementById('doc-view').innerHTML =
-      '<p class="placeholder">Выберите документ для просмотра</p>';
+    document.getElementById('doc-view').innerHTML = '<p class="placeholder">Выберите документ</p>';
   },
 
   closeCandidate() {
@@ -217,10 +239,9 @@ const Game = {
   showDoc(type) {
     const c = State.candidates.find(x => x.id === State.currentCandId);
     if (!c) return;
-    const view = document.getElementById('doc-view');
-
+    const v = document.getElementById('doc-view');
     if (type === 'passport') {
-      view.innerHTML = `
+      v.innerHTML = `
         <div class="doc-title">📕 Паспорт РФ</div>
         <div class="doc-row"><span>ФИО:</span><b>${c.name}</b></div>
         <div class="doc-row"><span>Пол:</span><b>${c.gender === 'М' ? 'Мужской' : 'Женский'}</b></div>
@@ -230,19 +251,19 @@ const Game = {
         <div class="doc-row"><span>Судимости:</span><b class="${c.passport.criminal ? 'doc-bad' : 'doc-good'}">${c.passport.criminal ? '⚠ ЕСТЬ' : 'Нет'}</b></div>
         <div class="doc-row"><span>Долги:</span><b class="${c.passport.debts ? 'doc-warn' : 'doc-good'}">${c.passport.debts ? '⚠ Есть' : 'Нет'}</b></div>`;
     } else if (type === 'medical') {
-      view.innerHTML = `
+      v.innerHTML = `
         <div class="doc-title">🩺 Медкарта</div>
         <div class="doc-row"><span>Состояние:</span><b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Здоров' : c.medical.issue}</b></div>
         <div class="doc-row"><span>Психика:</span><b class="${c.medical.psych > 80 ? 'doc-good' : c.medical.psych > 60 ? 'doc-warn' : 'doc-bad'}">${c.medical.psych}/100</b></div>
         <div class="doc-row"><span>Допуск:</span><b class="${c.medical.healthy ? 'doc-good' : 'doc-bad'}">${c.medical.healthy ? 'Разрешён' : 'Ограничен'}</b></div>`;
     } else if (type === 'military') {
-      view.innerHTML = `
+      v.innerHTML = `
         <div class="doc-title">🎖️ Военбилет</div>
         <div class="doc-row"><span>Служба:</span><b class="${c.military.served ? 'doc-good' : 'doc-bad'}">${c.military.served ? 'Проходил' : 'Не проходил'}</b></div>
         <div class="doc-row"><span>Категория:</span><b>${c.military.category}</b></div>
         <div class="doc-row"><span>Горячие точки:</span><b class="${c.military.hotSpots ? 'doc-warn' : ''}">${c.military.hotSpots ? 'Да (' + c.military.hotspot + ')' : 'Нет'}</b></div>`;
     } else if (type === 'experience') {
-      view.innerHTML = `
+      v.innerHTML = `
         <div class="doc-title">📜 Стаж</div>
         <div class="doc-row"><span>Лет:</span><b>${c.experience.years}</b></div>
         <div class="doc-row"><span>Последнее:</span><b>${c.experience.lastJob}</b></div>
@@ -253,6 +274,7 @@ const Game = {
   hireCurrent() {
     const c = State.candidates.find(x => x.id === State.currentCandId);
     if (!c) return;
+    if (c.reprimands === undefined) c.reprimands = 0;
     State.staff.push(c);
     State.candidates = State.candidates.filter(x => x.id !== c.id);
     this.log(`✅ Принят: ${c.name} (${c.rank})`, 'success');
@@ -297,10 +319,12 @@ Object.assign(Game, {
       return;
     }
 
-    list.innerHTML = active.map(s => `
+    list.innerHTML = active.map(s => {
+      const rep = s.reprimands || 0;
+      return `
       <div class="staff-card">
         <div class="staff-top">
-          <div class="staff-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
+          <div class="staff-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}${rep > 0 ? `<span class="reprimand-badge">${rep}/3</span>` : ''}</div>
           <div class="staff-rank">${s.rank}</div>
         </div>
         <div class="health-bar"><div style="width:${s.health}%"></div></div>
@@ -309,13 +333,10 @@ Object.assign(Game, {
           <span>😩 ${s.fatigue}</span>
           <span>💼 ${formatMoney(s.salary)}</span>
         </div>
-        <div class="staff-actions">
-          <button class="btn small primary" onclick="Game.promote(${s.id})">⬆ Повысить</button>
-          <button class="btn small" onclick="Game.demote(${s.id})">⬇ Понизить</button>
-          <button class="btn small warn" onclick="Game.reprimand(${s.id})">⚠ Выговор</button>
-          <button class="btn small danger" onclick="Game.fire(${s.id})">🚫 Уволить</button>
-        </div>
-      </div>`).join('');
+        <button class="btn-delo" onclick="Game.openDossier(${s.id})">📁 Личное дело</button>
+      </div>
+      `;
+    }).join('');
 
     this.updateStats();
     this.renderHospital();
@@ -328,12 +349,10 @@ Object.assign(Game, {
     if (counter) counter.textContent = wounded.length;
     const list = document.getElementById('hospital-list');
     if (!list) return;
-
     if (wounded.length === 0) {
       list.innerHTML = '<p class="placeholder">Никто не ранен</p>';
       return;
     }
-
     list.innerHTML = wounded.map(s => `
       <div class="staff-card wounded">
         <div class="staff-top">
@@ -345,11 +364,53 @@ Object.assign(Game, {
           <span>❤️ ${s.health}/100</span>
           <span>⏳ ${s.healDays} дн.</span>
         </div>
-        <div class="staff-actions">
-          <button class="btn small primary" onclick="Game.healFast(${s.id})">💊 Лечить (10 000₽)</button>
-          <button class="btn small danger" onclick="Game.fire(${s.id})">🚫 Уволить</button>
-        </div>
+        <button class="btn-delo" onclick="Game.openDossier(${s.id})">📁 Личное дело</button>
       </div>`).join('');
+  },
+
+  openDossier(id) {
+    const s = this.findStaff(id);
+    if (!s) return;
+    const rep = s.reprimands || 0;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'dossier-overlay';
+    overlay.id = 'dossier-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) Game.closeDossier(); };
+
+    overlay.innerHTML = `
+      <div class="dossier">
+        <h2>📁 ЛИЧНОЕ ДЕЛО</h2>
+        <div class="d-row"><span>ФИО:</span><b>${s.name}</b></div>
+        <div class="d-row"><span>Звание:</span><b>${s.rank}</b></div>
+        <div class="d-row"><span>Возраст:</span><b>${s.age}</b></div>
+        <div class="d-row"><span>Телефон:</span><b>${s.phone}</b></div>
+        <div class="d-row"><span>Оклад:</span><b>${formatMoney(s.salary)}</b></div>
+        <div class="d-row"><span>День найма:</span><b>${s.hireDay || '—'}</b></div>
+        <div class="d-row"><span>Здоровье:</span><b>${s.health}/100</b></div>
+        <div class="d-row"><span>Усталость:</span><b>${s.fatigue}</b></div>
+        <div class="d-row"><span>Выговоры:</span><b>${rep} / 3</b></div>
+
+        <div class="d-section">
+          <div class="d-section-title">⚙ Действия</div>
+          <div class="d-actions">
+            <button onclick="Game.promote(${s.id})">⬆ Повысить</button>
+            <button onclick="Game.demote(${s.id})">⬇ Понизить</button>
+            <button onclick="Game.reprimand(${s.id})">⚠ Выговор</button>
+            <button onclick="Game.clearReprimand(${s.id})">✖ Снять выговор</button>
+            <button class="danger" onclick="Game.fire(${s.id})" style="grid-column: span 2">🚫 Уволить</button>
+          </div>
+        </div>
+
+        <button class="d-close" onclick="Game.closeDossier()">ЗАКРЫТЬ</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  },
+
+  closeDossier() {
+    const o = document.getElementById('dossier-overlay');
+    if (o) o.remove();
   },
 
   promote(id) {
@@ -358,11 +419,12 @@ Object.assign(Game, {
     const list = RANKS[State.org];
     const idx = list.findIndex(r => r.name === s.rank);
     if (idx < 0) return;
-    if (idx >= list.length - 1) return this.toast(`${s.name} уже на максимальном звании`, 'warn');
+    if (idx >= list.length - 1) return this.toast(`${s.name} уже на максимуме`, 'warn');
     const old = s.rank;
     s.rank = list[idx + 1].name;
     this.log(`⬆ ${s.name}: ${old} → ${s.rank}`, 'success');
     this.toast(`${s.name} → ${s.rank}`, 'success');
+    this.closeDossier();
     this.renderStaff();
     this.autoSave();
   },
@@ -372,11 +434,12 @@ Object.assign(Game, {
     if (!s) return;
     const list = RANKS[State.org];
     const idx = list.findIndex(r => r.name === s.rank);
-    if (idx <= 0) return this.toast(`${s.name} уже на минимальном звании`, 'warn');
+    if (idx <= 0) return this.toast(`${s.name} уже на минимуме`, 'warn');
     s.rank = list[idx - 1].name;
     s.skills.loyalty -= 15;
     this.log(`⬇ ${s.name} понижен до ${s.rank}`, 'warn');
     this.toast(`${s.name} понижен`, 'warn');
+    this.closeDossier();
     this.renderStaff();
     this.autoSave();
   },
@@ -384,9 +447,38 @@ Object.assign(Game, {
   reprimand(id) {
     const s = this.findStaff(id);
     if (!s) return;
+    if (!s.reprimands) s.reprimands = 0;
+    s.reprimands++;
     s.skills.loyalty -= 10;
-    this.log(`⚠ ${s.name}: выговор`, 'warn');
-    this.toast(`${s.name}: выговор`, 'warn');
+    this.log(`⚠ ${s.name}: выговор (${s.reprimands}/3)`, 'warn');
+    this.toast(`${s.name}: выговор ${s.reprimands}/3`, 'warn');
+    this.closeDossier();
+
+    if (s.reprimands >= MAX_REPRIMANDS) {
+      this.log(`🚫 ${s.name} уволен за 3 выговора`, 'danger');
+      this.toast(`${s.name} уволен (3 выговора)`, 'danger');
+      State.groups.forEach(g => { g.members = g.members.filter(mid => mid !== id); });
+      State.staff = State.staff.filter(x => x.id !== id);
+      State.selectedStaff = State.selectedStaff.filter(sid => sid !== id);
+      this.renderStaff();
+      this.renderGroups();
+      this.renderStaffPicker();
+    } else {
+      this.renderStaff();
+    }
+    this.autoSave();
+  },
+
+  clearReprimand(id) {
+    const s = this.findStaff(id);
+    if (!s) return;
+    if (!s.reprimands || s.reprimands <= 0) return this.toast('Нет выговоров', 'warn');
+    s.reprimands--;
+    s.skills.loyalty += 5;
+    this.log(`✖ ${s.name}: выговор снят (${s.reprimands}/3)`, 'success');
+    this.toast(`Выговор снят`, 'success');
+    this.closeDossier();
+    this.renderStaff();
     this.autoSave();
   },
 
@@ -399,6 +491,7 @@ Object.assign(Game, {
     State.selectedStaff = State.selectedStaff.filter(sid => sid !== id);
     this.log(`🚫 Уволен: ${s.name}`, 'danger');
     this.toast(`${s.name} уволен`, 'danger');
+    this.closeDossier();
     this.renderStaff();
     this.renderGroups();
     this.autoSave();
@@ -412,6 +505,7 @@ Object.assign(Game, {
     s.health = 100; s.healDays = 0; s.wounded = false;
     this.log(`💊 ${s.name} вылечен`, 'success');
     this.toast(`${s.name} восстановлен`, 'success');
+    this.closeDossier();
     this.renderStaff();
     this.autoSave();
   },
@@ -455,7 +549,7 @@ Object.assign(Game, {
     if (!picker) return;
     const available = State.staff.filter(s => !s.wounded);
     if (available.length === 0) {
-      picker.innerHTML = '<p class="placeholder">Нет доступных сотрудников</p>';
+      picker.innerHTML = '<p class="placeholder">Нет сотрудников</p>';
       return;
     }
     picker.innerHTML = available.map(s => {
@@ -463,14 +557,13 @@ Object.assign(Game, {
       const inGroup = State.groups.some(g => g.members.includes(s.id));
       return `
         <label class="picker-item" style="${inGroup ? 'opacity:.5' : ''}">
-          <input type="checkbox" ${checked ? 'checked' : ''} ${inGroup ? 'disabled' : ''}
+          <input type="checkbox" ${checked ? 'checked' : ''}
             onchange="Game.toggleStaffPick(${s.id}, this.checked)">
           <div class="pi-info">
             <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
-            <div class="pi-rank">${s.rank}${inGroup ? ' · уже в группе' : ''}</div>
+            <div class="pi-rank">${s.rank}${inGroup ? ' · в группе: ' + State.groups.find(g => g.members.includes(s.id)).name : ''}</div>
           </div>
-        </label>
-      `;
+        </label>`;
     }).join('');
   },
 
@@ -491,8 +584,8 @@ Object.assign(Game, {
       if (!iconUrl) return this.toast('Введите URL иконки', 'warn');
       icon = iconUrl;
     } else { icon = iconSel; }
-    if (!name) return this.toast('Введите название группы', 'warn');
-    if (State.selectedStaff.length < 1) return this.toast('Выберите хотя бы 1 сотрудника', 'warn');
+    if (!name) return this.toast('Введите название', 'warn');
+    if (State.selectedStaff.length < 1) return this.toast('Выберите хотя бы 1', 'warn');
 
     const g = {
       id: State.nextGroupId++, name, icon,
@@ -500,18 +593,15 @@ Object.assign(Game, {
       custom: iconSel === '__custom'
     };
     State.groups.push(g);
-    this.log(`🎯 Создана группа «${name}» (${g.members.length} чел.)`, 'success');
+    this.log(`🎯 Создана группа «${name}» (${g.members.length})`, 'success');
     this.toast(`Группа «${name}» создана`, 'success');
-
     State.selectedStaff = [];
     document.getElementById('group-name').value = '';
     document.getElementById('group-icon-url').value = '';
     const prev = document.getElementById('icon-preview');
     if (prev) prev.innerHTML = '';
-
     this.renderGroups();
     this.renderStaffPicker();
-    this.updateGroupsCount();
     this.autoSave();
   },
 
@@ -539,12 +629,71 @@ Object.assign(Game, {
         <div class="group-card ${woundedCount > 0 ? 'wounded' : ''}">
           <div class="g-name">${iconHtml} ${g.name}</div>
           <div class="g-info">👥 Готовы: ${alive.length} / ${members.length}</div>
-          ${woundedCount > 0 ? `<div class="g-info" style="color:#f85149">🏥 Раненых: ${woundedCount}</div>` : ''}
           <div class="g-members">${members.map(s => `${s.wounded ? '🏥' : '•'} ${s.name}`).join('<br>')}</div>
-          <button class="btn small danger" style="margin-top:6px" onclick="Game.deleteGroup(${g.id})">Расформировать</button>
+          <div class="g-actions">
+            <button class="btn small primary" onclick="Game.addToGroup(${g.id})">➕ Добавить людей</button>
+            <button class="btn small danger" onclick="Game.deleteGroup(${g.id})">Расформировать</button>
+          </div>
         </div>`;
     }).join('');
     this.updateGroupsCount();
+  },
+
+  addToGroup(groupId) {
+    const g = State.groups.find(x => x.id === groupId);
+    if (!g) return;
+    const available = State.staff.filter(s => !s.wounded && !g.members.includes(s.id));
+    if (available.length === 0) return this.toast('Нет свободных сотрудников', 'warn');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'dossier-overlay';
+    overlay.id = 'add-group-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) Game.closeAddGroup(); };
+
+    overlay.innerHTML = `
+      <div class="dossier">
+        <h2>➕ ДОБАВИТЬ В «${g.name}»</h2>
+        <div style="max-height: 300px; overflow-y: auto;">
+          ${available.map(s => `
+            <label class="picker-item" style="margin-bottom:5px">
+              <input type="checkbox" id="add-${s.id}">
+              <div class="pi-info">
+                <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
+                <div class="pi-rank">${s.rank}</div>
+              </div>
+            </label>
+          `).join('')}
+        </div>
+        <button class="d-close" onclick="Game.confirmAddToGroup(${g.id})">ДОБАВИТЬ</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  },
+
+  closeAddGroup() {
+    const o = document.getElementById('add-group-overlay');
+    if (o) o.remove();
+  },
+
+  confirmAddToGroup(groupId) {
+    const g = State.groups.find(x => x.id === groupId);
+    if (!g) return;
+    const available = State.staff.filter(s => !s.wounded && !g.members.includes(s.id));
+    let added = 0;
+    available.forEach(s => {
+      const cb = document.getElementById('add-' + s.id);
+      if (cb && cb.checked) {
+        g.members.push(s.id);
+        added++;
+      }
+    });
+    this.closeAddGroup();
+    if (added === 0) return this.toast('Никого не выбрано', 'warn');
+    this.log(`➕ В группу «${g.name}» добавлено ${added} чел.`, 'success');
+    this.toast(`+${added} в группу`, 'success');
+    this.renderGroups();
+    this.renderStaffPicker();
+    this.autoSave();
   },
 
   deleteGroup(id) {
@@ -555,14 +704,19 @@ Object.assign(Game, {
     this.autoSave();
   }
 });
-  // ============================================================
+// ============================================================
 //  ПОЛКОВНИК — game.js — ЧАСТЬ 3/4
 // ============================================================
 
 Object.assign(Game, {
 
   generateEvent() {
-    const type = rnd(CRIMES);
+    if (!State.org) return;
+    const active = State.events.filter(e => e.status === 'pending');
+    if (active.length >= 5) return;
+
+    const missions = State.org === 'FSB' ? MISSIONS_FSB : MISSIONS_MVD;
+    const type = rnd(missions);
     const addr = `${rnd(STREETS)}, д. ${rndInt(1, 120)}`;
     const threat = chance(0.3) ? 'high' : chance(0.5) ? 'medium' : 'low';
     const e = {
@@ -580,11 +734,12 @@ Object.assign(Game, {
   renderEvents() {
     const el = document.getElementById('events-list');
     if (!el) return;
-    if (State.events.length === 0) {
-      el.innerHTML = '<p class="placeholder">Пока тихо</p>';
+    const active = State.events.filter(e => e.status === 'pending');
+    if (active.length === 0) {
+      el.innerHTML = '<p class="placeholder">Пока тихо...</p>';
       return;
     }
-    el.innerHTML = State.events.map(e => {
+    el.innerHTML = active.map(e => {
       const threatLabel = { high: '🔴 Высокая', medium: '🟡 Средняя', low: '🟢 Низкая' }[e.threat];
       const cls = e.threat === 'high' ? '' : e.threat === 'medium' ? 'medium' : 'low';
       return `
@@ -592,11 +747,8 @@ Object.assign(Game, {
           <div class="e-title">${e.title}</div>
           <div class="e-addr">📍 ${e.addr} · ${threatLabel} · Преступников: ${e.criminals}</div>
           <div class="e-actions">
-            ${e.status === 'pending' ? `
-              <button class="btn small primary" onclick="Game.openOperation(${e.id}, 'group')">🎯 Отправить группу</button>
-              <button class="btn small" onclick="Game.openOperation(${e.id}, 'self')">🚗 Выехать лично</button>
-              <button class="btn small danger" onclick="Game.ignore(${e.id})">Игнор</button>
-            ` : `<span class="rank-badge">${e.status}</span>`}
+            <button class="btn small primary" onclick="Game.openOperation(${e.id}, 'group')">🎯 Группа</button>
+            <button class="btn small" onclick="Game.openOperation(${e.id}, 'self')">🚗 Лично</button>
           </div>
         </div>`;
     }).join('');
@@ -605,9 +757,6 @@ Object.assign(Game, {
   openOperation(eventId, mode) {
     const e = State.events.find(x => x.id === eventId);
     if (!e || e.status !== 'pending') return;
-
-    State._op = { eventId, mode };
-
     document.getElementById('operation-detail').style.display = 'block';
     document.getElementById('op-title').textContent = e.title;
     document.getElementById('op-info').innerHTML = `
@@ -655,18 +804,18 @@ Object.assign(Game, {
       btn.onclick = () => this.goSelf(e.id);
       document.getElementById('op-log').appendChild(btn);
     }
+    document.getElementById('operation-detail').scrollIntoView({ behavior: 'smooth' });
   },
 
   closeOperation() {
     document.getElementById('operation-detail').style.display = 'none';
-    State._op = null;
   },
 
   logOp(text, type = 'info') {
     const log = document.getElementById('op-log');
     if (!log) return;
     const time = new Date().toLocaleTimeString('ru-RU',
-      { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      { hour: '2-digit', minute: '2-digit' });
     const line = document.createElement('div');
     line.className = 'op-log-line ' + type;
     line.innerHTML = `<span class="log-time">[${time}]</span>${text}`;
@@ -688,18 +837,17 @@ Object.assign(Game, {
     if (fighters.length === 0) return this.toast('Группа небоеспособна', 'danger');
 
     this.logOp(`🚔 Группа «${g.name}» выехала на задание`, 'system');
-    await this.sleep(900);
+    await this.sleep(OP_STEP_MS);
     this.logOp(`📻 Связь: «Прибыли на место. Занимаем позиции»`, 'info');
-    await this.sleep(1100);
-    this.logOp(`👁 Наблюдаем движение внутри. Преступников: ${e.criminals}`, 'warn');
-    await this.sleep(1200);
+    await this.sleep(OP_STEP_MS);
+    this.logOp(`👁 Наблюдаем движение. Преступников: ${e.criminals}`, 'warn');
+    await this.sleep(OP_STEP_MS);
     this.logOp(`🚧 Оцепление выставлено. Готовимся к штурму`, 'info');
-    await this.sleep(1200);
-
+    await this.sleep(OP_STEP_MS);
     this.logOp(`💥 Штурм начался!`, 'system');
-    await this.sleep(1000);
+    await this.sleep(OP_STEP_MS);
     this.logOp(`🔫 Перестрелка!`, 'bad');
-    await this.sleep(700);
+    await this.sleep(2000);
 
     const avgBravery = fighters.reduce((a, s) => a + s.skills.bravery, 0) / fighters.length;
     const avgIntellect = fighters.reduce((a, s) => a + s.skills.intellect, 0) / fighters.length;
@@ -715,7 +863,6 @@ Object.assign(Game, {
         ourKilled = chance(0.15) ? 1 : 0;
         ourWounded = rndInt(0, Math.max(0, Math.floor(fighters.length / 2)));
       } else {
-        ourKilled = 0;
         ourWounded = rndInt(0, 1);
       }
     } else {
@@ -726,7 +873,6 @@ Object.assign(Game, {
     }
 
     const shuffled = [...fighters].sort(() => Math.random() - 0.5);
-
     for (let i = 0; i < ourWounded && i < shuffled.length; i++) {
       const s = shuffled[i];
       s.health = rndInt(10, 45);
@@ -734,56 +880,50 @@ Object.assign(Game, {
       s.healDays = rndInt(2, 5);
       s.fatigue += 25;
       this.logOp(`🏥 ${s.name} ранен, эвакуирован (${s.healDays} дн.)`, 'warn');
-      await this.sleep(600);
     }
-
     for (let i = 0; i < ourKilled && i + ourWounded < shuffled.length; i++) {
       const s = shuffled[ourWounded + i];
       this.logOp(`💀 ${s.name} погиб при исполнении`, 'bad');
-      State.groups.forEach(gr => {
-        gr.members = gr.members.filter(mid => mid !== s.id);
-      });
+      State.groups.forEach(gr => { gr.members = gr.members.filter(mid => mid !== s.id); });
       State.staff = State.staff.filter(x => x.id !== s.id);
-      await this.sleep(700);
     }
 
     this.logOp(`🛡 Зачистка завершена`, 'info');
-    await this.sleep(800);
     this.logOp(`📊 Потери противника: убито ${enemyKilled}, ранено ${enemyWounded}`, 'info');
-    await this.sleep(600);
     this.logOp(`📊 Наши потери: убито ${ourKilled}, ранено ${ourWounded}`,
       ourKilled > 0 ? 'bad' : 'info');
-    await this.sleep(600);
 
     if (success) {
-      e.status = '✅ Успех';
+      e.status = 'archived';
       State.money += 20000;
       State.reputation += 3;
       State.myExp += 50;
-      fighters.forEach(s => {
-        if (!s.wounded) {
-          s.exp += 30;
-          s.fatigue += 15;
-        }
-      });
-      this.logOp(`✅ Операция завершена успешно`, 'good');
+      fighters.forEach(s => { if (!s.wounded) { s.exp += 30; s.fatigue += 15; } });
+      this.logOp(`✅ Операция завершена успешно → в архив`, 'good');
       this.logOp(`💰 +20 000₽ · ⭐ +3 репутации`, 'good');
-      this.log(`✅ Группа «${g.name}» — ${e.title}. Потери: ${ourKilled}/${ourWounded}`, 'success');
+      this.log(`✅ «${g.name}» — ${e.title}. Потери: ${ourKilled}/${ourWounded}`, 'success');
       this.toast('Успех! +20000₽', 'success');
+
+      State.archive.push({
+        title: e.title, addr: e.addr, day: State.day,
+        group: g.name, success: true,
+        ourKilled, ourWounded, enemyKilled, enemyWounded
+      });
     } else {
-      e.status = '❌ Провал';
+      e.status = 'pending';
       State.reputation -= 5;
       State.myExp += 10;
-      this.logOp(`❌ Операция провалена`, 'bad');
-      this.logOp(`📉 -5 репутации`, 'bad');
+      this.logOp(`❌ Операция провалена. Вызов остаётся!`, 'bad');
+      this.logOp(`📉 -5 репутации. Можно отправить другую группу`, 'warn');
       this.log(`❌ Провал: ${e.title}. Потери: ${ourKilled}/${ourWounded}`, 'danger');
-      this.toast('Провал операции', 'danger');
+      this.toast('Провал! Событие осталось', 'danger');
     }
 
     this.showOpResult(e, { success, ourKilled, ourWounded, enemyKilled, enemyWounded });
     this.renderEvents();
     this.renderStaff();
     this.renderGroups();
+    this.renderArchive();
     this.updateStats();
     this.autoSave();
   },
@@ -791,18 +931,19 @@ Object.assign(Game, {
   async goSelf(eventId) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
-
     const opLog = document.getElementById('op-log');
     opLog.innerHTML = '';
 
-    this.logOp(`🚗 Полковник лично выехал на задание`, 'system');
-    await this.sleep(900);
+    this.logOp(`🚗 Полковник выехал лично`, 'system');
+    await this.sleep(OP_STEP_MS);
     this.logOp(`📻 «Прибыл на место. Оцениваю обстановку»`, 'info');
-    await this.sleep(1100);
+    await this.sleep(OP_STEP_MS);
     this.logOp(`👁 Преступников: ${e.criminals}`, 'warn');
-    await this.sleep(1100);
+    await this.sleep(OP_STEP_MS);
     this.logOp(`🔫 Вступаю в контакт!`, 'bad');
-    await this.sleep(1200);
+    await this.sleep(OP_STEP_MS);
+    this.logOp(`💥 Бой!`, 'bad');
+    await this.sleep(OP_STEP_MS);
 
     const success = chance(0.65);
     let ourKilled = 0, ourWounded = 0, enemyKilled = 0, enemyWounded = 0;
@@ -812,38 +953,39 @@ Object.assign(Game, {
       enemyWounded = e.criminals - enemyKilled;
       ourWounded = chance(0.3) ? 1 : 0;
       this.logOp(`✅ Преступники нейтрализованы`, 'good');
-      await this.sleep(800);
       this.logOp(`📊 Убито: ${enemyKilled}, ранено: ${enemyWounded}`, 'info');
       if (ourWounded) this.logOp(`🏥 Полковник ранен`, 'warn');
 
-      e.status = '✅ Успех (лично)';
+      e.status = 'archived';
       State.money += 15000;
       State.reputation += 5;
       State.myExp += 80;
-      this.logOp(`💰 +15 000₽ · ⭐ +5 репутации`, 'good');
+      this.logOp(`💰 +15 000₽ · ⭐ +5 репутации → в архив`, 'good');
       this.log(`✅ Лично: ${e.title}`, 'success');
       this.toast('Личный успех! +15000₽', 'success');
+
+      State.archive.push({
+        title: e.title, addr: e.addr, day: State.day,
+        group: 'Лично', success: true,
+        ourKilled, ourWounded, enemyKilled, enemyWounded
+      });
     } else {
       enemyKilled = rndInt(0, Math.floor(e.criminals / 2));
       enemyWounded = rndInt(0, e.criminals);
       ourWounded = 1;
-      this.logOp(`❌ Преступники скрылись`, 'bad');
-      await this.sleep(800);
-      this.logOp(`📊 Убито: ${enemyKilled}, ранено: ${enemyWounded}`, 'info');
-      this.logOp(`🏥 Полковник ранен`, 'warn');
-
-      e.status = '❌ Провал (лично)';
+      e.status = 'pending';
       State.reputation -= 8;
       State.myExp += 20;
-      this.logOp(`📉 -8 репутации`, 'bad');
+      this.logOp(`❌ Провал. Вызов остаётся!`, 'bad');
       this.log(`❌ Провал лично: ${e.title}`, 'danger');
-      this.toast('Провал лично', 'danger');
+      this.toast('Провал! Событие осталось', 'danger');
     }
 
     this.showOpResult(e, { success, ourKilled, ourWounded, enemyKilled, enemyWounded });
     this.renderEvents();
     this.renderStaff();
     this.renderGroups();
+    this.renderArchive();
     this.updateStats();
     this.autoSave();
   },
@@ -854,7 +996,7 @@ Object.assign(Game, {
     res.className = 'op-result ' + (r.success ? 'win' : 'lose');
     res.innerHTML = `
       <div class="res-title ${r.success ? 'win' : 'lose'}">
-        ${r.success ? '✅ Операция завершена' : '❌ Операция провалена'}
+        ${r.success ? '✅ Успех → архив' : '❌ Провал — вызов остаётся'}
       </div>
       <div class="res-row"><span>Объект:</span><b>${e.title}</b></div>
       <div class="res-row"><span>💀 Наши убиты:</span><b style="color:${r.ourKilled > 0 ? '#f85149' : '#3fb950'}">${r.ourKilled}</b></div>
@@ -864,15 +1006,20 @@ Object.assign(Game, {
     `;
   },
 
-  ignore(eventId) {
-    const e = State.events.find(x => x.id === eventId);
-    if (!e) return;
-    e.status = '⚪ Игнор';
-    State.reputation -= 3;
-    this.log(`⚪ Игнор: ${e.title}`, 'warn');
-    this.renderEvents();
-    this.updateStats();
-    this.autoSave();
+  renderArchive() {
+    const el = document.getElementById('archive-list');
+    if (!el) return;
+    if (!State.archive || State.archive.length === 0) {
+      el.innerHTML = '<p class="placeholder">Пусто</p>';
+      return;
+    }
+    el.innerHTML = [...State.archive].reverse().map(a => `
+      <div class="archive-card">
+        <div class="a-title">✅ ${a.title}</div>
+        <div class="a-info">📍 ${a.addr} · 📅 День ${a.day}</div>
+        <div class="a-info">🎯 ${a.group} · 💀 ${a.ourKilled}/${a.ourWounded} · враг ${a.enemyKilled}/${a.enemyWounded}</div>
+      </div>
+    `).join('');
   }
 });
 // ============================================================
@@ -915,6 +1062,7 @@ Object.assign(Game, {
     const w = State.wanted.find(x => x.id === id);
     if (!w) return;
     State._wanted = id;
+    State.selectedTeam = [];
 
     document.getElementById('wanted-detail').style.display = 'block';
     document.getElementById('wanted-detail-title').textContent = `Задержание: ${w.name}`;
@@ -923,42 +1071,53 @@ Object.assign(Game, {
       <div class="oi-row"><span>Преступление:</span><b>${w.crime}</b></div>
       <div class="oi-row"><span>Уровень:</span><b>${w.level}</b></div>
     `;
+    this.renderWantedStaffPicker();
+    document.getElementById('wanted-detail').scrollIntoView({ behavior: 'smooth' });
+  },
 
-    const picker = document.getElementById('wanted-groups-picker');
-    const available = State.groups.filter(g =>
-      g.members.some(id => {
-        const s = this.findStaff(id);
-        return s && !s.wounded;
-      })
-    );
-
+  renderWantedStaffPicker() {
+    const picker = document.getElementById('wanted-staff-picker');
+    if (!picker) return;
+    const available = State.staff.filter(s => !s.wounded);
     if (available.length === 0) {
-      picker.innerHTML = '<p class="placeholder">Нет боеспособных групп</p>';
+      picker.innerHTML = '<p class="placeholder">Нет доступных сотрудников</p>';
       return;
     }
-
-    picker.innerHTML = available.map(g => {
-      const alive = g.members.filter(id => {
-        const s = this.findStaff(id);
-        return s && !s.wounded;
-      });
+    picker.innerHTML = available.map(s => {
+      const checked = State.selectedTeam.includes(s.id);
       return `
-        <div class="gp-item" onclick="Game.sendWantedGroup(${g.id})">
-          <div class="gp-name">${g.custom ? `<img src="${g.icon}">` : g.icon} ${g.name}</div>
-          <div class="gp-info">👥 Бойцов: ${alive.length}</div>
-        </div>`;
+        <label class="picker-item">
+          <input type="checkbox" ${checked ? 'checked' : ''}
+            onchange="Game.toggleTeamPick(${s.id}, this.checked)">
+          <div class="pi-info">
+            <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
+            <div class="pi-rank">${s.rank} · ❤️ ${s.health}</div>
+          </div>
+        </label>`;
     }).join('');
+  },
+
+  toggleTeamPick(id, checked) {
+    if (checked) {
+      if (!State.selectedTeam.includes(id)) State.selectedTeam.push(id);
+    } else {
+      State.selectedTeam = State.selectedTeam.filter(sid => sid !== id);
+    }
   },
 
   closeWanted() {
     document.getElementById('wanted-detail').style.display = 'none';
     State._wanted = null;
+    State.selectedTeam = [];
   },
 
-  async sendWantedGroup(groupId) {
+  async sendWantedTeam() {
     const w = State.wanted.find(x => x.id === State._wanted);
-    const g = State.groups.find(x => x.id === groupId);
-    if (!w || !g) return;
+    if (!w) return;
+    if (State.selectedTeam.length === 0) return this.toast('Выберите хотя бы 1 сотрудника', 'warn');
+
+    const fighters = State.selectedTeam.map(id => this.findStaff(id)).filter(s => s && !s.wounded);
+    if (fighters.length === 0) return this.toast('Нет бойцов', 'danger');
 
     const tempEvent = {
       id: 0, title: `Задержание: ${w.name}`, addr: w.crime,
@@ -971,20 +1130,22 @@ Object.assign(Game, {
     document.getElementById('op-info').innerHTML = `
       <div class="oi-row"><span>👤 Объект:</span><b>${w.name}</b></div>
       <div class="oi-row"><span>⚖️ Преступление:</span><b>${w.crime}</b></div>
-      <div class="oi-row"><span>🎯 Уровень:</span><b>${w.level}</b></div>
-      <div class="oi-row"><span>🚔 Группа:</span><b>${g.name}</b></div>
+      <div class="oi-row"><span>👥 Отправлено:</span><b>${fighters.length} чел.</b></div>
+      <div class="oi-row"><span>🎯 Состав:</span><b>${fighters.map(s => s.name.split(' ')[0]).join(', ')}</b></div>
     `;
     document.getElementById('op-log').innerHTML = '';
     document.getElementById('op-result').style.display = 'none';
 
-    const fighters = g.members.map(id => this.findStaff(id)).filter(s => s && !s.wounded);
-
-    this.logOp(`🚔 Группа «${g.name}» выехала на задержание`, 'system');
-    await this.sleep(900);
+    this.logOp(`🚔 Отправлено ${fighters.length} чел. на задержание ${w.name}`, 'system');
+    await this.sleep(OP_STEP_MS);
     this.logOp(`📻 «Прибыли по адресу. Ищем объект»`, 'info');
-    await this.sleep(1100);
+    await this.sleep(OP_STEP_MS);
     this.logOp(`👁 Объект обнаружен, начинаем преследование`, 'warn');
-    await this.sleep(1200);
+    await this.sleep(OP_STEP_MS);
+    this.logOp(`🏃 Погоня!`, 'bad');
+    await this.sleep(OP_STEP_MS);
+    this.logOp(`🤝 Задерживаем!`, 'bad');
+    await this.sleep(OP_STEP_MS);
 
     const avgBravery = fighters.reduce((a, s) => a + s.skills.bravery, 0) / fighters.length;
     const successChance = 0.55 + avgBravery / 400;
@@ -994,7 +1155,6 @@ Object.assign(Game, {
 
     if (success) {
       this.logOp(`✅ Объект задержан!`, 'good');
-      await this.sleep(700);
       ourWounded = chance(0.25) ? 1 : 0;
       if (ourWounded) {
         const s = fighters[rndInt(0, fighters.length - 1)];
@@ -1003,9 +1163,8 @@ Object.assign(Game, {
         s.healDays = rndInt(1, 3);
         this.logOp(`🏥 ${s.name} получил травму (${s.healDays} дн.)`, 'warn');
       }
-      await this.sleep(700);
       this.logOp(`📊 Задержан: ${w.name}`, 'info');
-      this.logOp(`💰 Награда: +30 000₽ · ⭐ +4 репутации`, 'good');
+      this.logOp(`💰 +30 000₽ · ⭐ +4 репутации`, 'good');
 
       State.wanted = State.wanted.filter(x => x.id !== w.id);
       State.money += 30000;
@@ -1014,14 +1173,18 @@ Object.assign(Game, {
       this.log(`🚔 Задержан: ${w.name}`, 'success');
       this.toast(`${w.name} задержан`, 'success');
 
+      State.archive.push({
+        title: `Задержание: ${w.name}`, addr: w.crime, day: State.day,
+        group: 'Группа ' + fighters.length + ' чел.', success: true,
+        ourKilled: 0, ourWounded, enemyKilled: 0, enemyWounded: 1
+      });
+
       this.showOpResult(tempEvent, {
         success: true, ourKilled: 0, ourWounded,
         enemyKilled: 0, enemyWounded: 1
       });
     } else {
       this.logOp(`❌ Объект скрылся!`, 'bad');
-      await this.sleep(700);
-      this.logOp(`📊 Побег: ${w.name}`, 'info');
       this.log(`❌ ${w.name} скрылся`, 'danger');
       this.toast('Не удалось задержать', 'danger');
 
@@ -1031,9 +1194,11 @@ Object.assign(Game, {
       });
     }
 
+    State.selectedTeam = [];
     this.renderWanted();
     this.renderStaff();
     this.renderGroups();
+    this.renderArchive();
     this.updateStats();
     this.autoSave();
   },
@@ -1075,13 +1240,12 @@ Object.assign(Game, {
 
   autoSave() {
     try {
-      const data = { version: SAVE_VERSION, state: State, savedAt: new Date().toISOString() };
+      const data = { version: SAVE_VERSION, state: {
+        ...State,
+        _eventTimer: null, _candTimer: null
+      }, savedAt: new Date().toISOString() };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (e) { console.warn('Ошибка автосейва:', e); }
-  },
-
-  loadGame() {
-    console.log('loadGame() не используется — автозагрузка в init()');
   },
 
   toast(msg, type = 'info') {
@@ -1106,10 +1270,10 @@ Object.assign(Game, {
     this.renderStaffPicker();
     this.renderEvents();
     this.renderWanted();
+    this.renderArchive();
     this.renderLog();
     this.updateStats();
   }
 });
 
-// ЗАПУСК
 window.addEventListener('DOMContentLoaded', () => Game.init());
