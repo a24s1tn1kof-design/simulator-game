@@ -295,3 +295,65 @@ body { background: #0d1117; color: #c9d1d9; font-size: 15px;
   .group-form { flex-direction: row; flex-wrap: wrap; }
   .group-form input, .group-form select { flex: 1; min-width: 140px; width: auto; }
                      }
+/* АДМИН-ПАНЕЛЬ */
+.btn-admin {
+  padding: 5px 12px;
+  background: #da3633;
+  color: #fff;
+  border: 1px solid #f85149;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .15s;
+}
+.btn-admin:active { transform: scale(.96); background: #b8221f; }
+
+.admin-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.8);
+  z-index: 1000; display: flex; align-items: flex-start; justify-content: center;
+  padding: 20px 10px; overflow-y: auto;
+}
+.admin-panel {
+  background: #1a0f0f; color: #ffcccc;
+  width: 100%; max-width: 480px;
+  border-radius: 8px; padding: 20px;
+  border: 2px solid #da3633;
+  box-shadow: 0 10px 40px rgba(218,54,51,.4);
+}
+.admin-panel h2 {
+  color: #f85149; font-size: 18px; text-align: center;
+  border-bottom: 2px solid #da3633;
+  padding-bottom: 10px; margin-bottom: 14px;
+  letter-spacing: 2px;
+}
+.admin-panel .a-row {
+  display: flex; justify-content: space-between; padding: 5px 0;
+  font-size: 13px; border-bottom: 1px dotted #da3633; gap: 8px;
+}
+.admin-panel .a-row span { color: #cc9999; }
+.admin-panel .a-row b { color: #ffcccc; }
+.admin-panel input, .admin-panel select {
+  width: 100%; padding: 10px 12px;
+  background: #0d0505; color: #ffcccc;
+  border: 1px solid #da3633; border-radius: 6px;
+  font-size: 14px; margin-bottom: 8px;
+}
+.admin-panel .a-btn {
+  width: 100%; padding: 12px;
+  background: #da3633; color: #fff;
+  border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 700;
+  font-size: 14px; letter-spacing: 1px;
+  margin-top: 8px;
+}
+.admin-panel .a-btn:active { background: #b8221f; }
+.admin-panel .a-close {
+  width: 100%; padding: 10px;
+  background: #30363d; color: #c9d1d9;
+  border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 600;
+  font-size: 13px; margin-top: 8px;
+}
+.admin-panel .a-error { color: #f85149; font-size: 12px; text-align: center; margin-top: 6px; }
+.admin-panel .a-hint { color: #cc9999; font-size: 12px; margin: 8px 0; }
