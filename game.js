@@ -554,14 +554,15 @@ Object.assign(Game, {
     }
     picker.innerHTML = available.map(s => {
       const checked = State.selectedStaff.includes(s.id);
-      const inGroup = State.groups.some(g => g.members.includes(s.id));
+      const inGroup = State.groups.find(g => g.members.includes(s.id));
+      const inGroupLabel = inGroup ? ` · в группе «${inGroup.name}»` : '';
       return `
-        <label class="picker-item" style="${inGroup ? 'opacity:.5' : ''}">
+        <label class="picker-item">
           <input type="checkbox" ${checked ? 'checked' : ''}
             onchange="Game.toggleStaffPick(${s.id}, this.checked)">
           <div class="pi-info">
             <div class="pi-name">${s.gender === 'М' ? '👨' : '👩'} ${s.name}</div>
-            <div class="pi-rank">${s.rank}${inGroup ? ' · в группе: ' + State.groups.find(g => g.members.includes(s.id)).name : ''}</div>
+            <div class="pi-rank">${s.rank}${inGroupLabel}</div>
           </div>
         </label>`;
     }).join('');
@@ -585,7 +586,7 @@ Object.assign(Game, {
       icon = iconUrl;
     } else { icon = iconSel; }
     if (!name) return this.toast('Введите название', 'warn');
-    if (State.selectedStaff.length < 1) return this.toast('Выберите хотя бы 1', 'warn');
+    if (State.selectedStaff.length < 1) return this.toast('Выберите хотя бы 1 сотрудника', 'warn');
 
     const g = {
       id: State.nextGroupId++, name, icon,
