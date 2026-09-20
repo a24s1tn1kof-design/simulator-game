@@ -3,8 +3,8 @@
 //  Ядро, состояние, кадры
 // ============================================================
 
-const SAVE_KEY = 'polkovnik_save_v7';
-const SAVE_VERSION = 7;
+const SAVE_KEY = 'polkovnik_save_v8';
+const SAVE_VERSION = 8;
 const HEAL_PER_DAY = 15;
 const HEAL_COST = 10000;
 const MAX_REPRIMANDS = 3;
@@ -24,7 +24,8 @@ const State = {
   activeOps: [],
   staffSearch: '',
   nextStaffId: 1, nextGroupId: 1, nextEventId: 1, nextWantedId: 1, nextJailId: 1,
-  _eventTimer: null, _candTimer: null, _bribeTimer: null
+  _eventTimer: null, _candTimer: null, _bribeTimer: null,
+  _fastForwardMs: 0
 };
 
 const FIRST_NAMES_M = ['Александр','Дмитрий','Сергей','Андрей','Иван','Максим','Николай','Владимир','Егор','Артём','Кирилл','Роман','Павел','Денис','Антон','Виктор','Олег','Игорь','Юрий','Константин','Григорий','Тимур','Руслан','Валерий','Станислав','Борис','Геннадий','Аркадий','Леонид','Пётр','Василий','Степан','Фёдор','Матвей','Никита','Арсений'];
@@ -76,6 +77,7 @@ const Game = {
           if (!State.smi) State.smi = [];
           if (!State.jail) State.jail = [];
           if (!State.activeOps) State.activeOps = [];
+          if (!State.nextJailId) State.nextJailId = 1;
           if (State.currentCandId === undefined) State.currentCandId = null;
           if (State.currentJailId === undefined) State.currentJailId = null;
           if (!State.staffSearch) State.staffSearch = '';
@@ -863,7 +865,7 @@ Object.assign(Game, {
     this.autoSave();
   }
 });
-// ============================================================
+  // ============================================================
 //  ПОЛКОВНИК — game.js — ЧАСТЬ 3/6
 //  Транспорт, магазин, СМИ, взятки, карточка организации
 // ============================================================
@@ -904,7 +906,6 @@ const SHOP_ITEMS = [
 
 Object.assign(Game, {
 
-  // ============ ТРАНСПОРТ ============
   renderTransport() {
     const el = document.getElementById('transport-list');
     const moneyEl = document.getElementById('transport-money');
@@ -968,7 +969,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ============ МАГАЗИН ============
   renderShop() {
     const el = document.getElementById('shop-list');
     const moneyEl = document.getElementById('shop-money');
@@ -1030,7 +1030,6 @@ Object.assign(Game, {
     }).join('');
   },
 
-  // ============ СМИ ============
   addSMI(type, title, text, effect) {
     if (!State.smi) State.smi = [];
     State.smi.unshift({ id: Date.now(), type, title, text, effect, day: State.day });
@@ -1057,7 +1056,6 @@ Object.assign(Game, {
     `).join('');
   },
 
-  // ============ ВЗЯТКИ ============
   generateBribe() {
     if (!State.org || State.bribe) return;
     const amount = rndInt(50, 200) * 1000;
@@ -1132,7 +1130,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ============ КАРТОЧКА ОРГАНИЗАЦИИ ============
   showOrgInfo() {
     if (!State.org) return;
     const isFSB = State.org === 'FSB';
@@ -1198,7 +1195,6 @@ Object.assign(Game, {
 
 Object.assign(Game, {
 
-  // ============ СОБЫТИЯ ============
   generateEvent() {
     if (!State.org) return;
     const active = State.events.filter(e => e.status === 'pending');
@@ -1301,7 +1297,6 @@ Object.assign(Game, {
     document.getElementById('operation-detail').style.display = 'none';
   },
 
-  // ============ ВЫБОР ЭКИПИРОВКИ ============
   openEquipPicker(eventId, groupId) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
@@ -1417,7 +1412,6 @@ Object.assign(Game, {
 
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
-  // ============ ОТПРАВКА ГРУППЫ ============
   async sendGroup(eventId, groupId, equipBonus = 0, transport = null) {
     const e = State.events.find(x => x.id === eventId);
     const g = State.groups.find(x => x.id === groupId);
@@ -1535,7 +1529,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ============ ЛИЧНЫЙ ВЫЕЗД ============
   async goSelf(eventId, equipBonus = 0, transport = null) {
     const e = State.events.find(x => x.id === eventId);
     if (!e) return;
@@ -1617,14 +1610,11 @@ Object.assign(Game, {
     `;
   },
 
-  // ============ ВОССТАНОВЛЕНИЕ АКТИВНЫХ ОПЕРАЦИЙ ПОСЛЕ F5 ============
   resumeActiveOps() {
-    // Упрощённое: если были активные операции, моментально завершаем
     if (!State.activeOps || State.activeOps.length === 0) return;
     State.activeOps.forEach(op => {
       const e = State.events.find(x => x.id === op.eventId);
       if (e && e.status === 'pending') {
-        // 50/50 моментальный исход
         const success = chance(0.6);
         e.status = success ? 'archived' : 'pending';
         if (success) {
@@ -1632,9 +1622,6 @@ Object.assign(Game, {
           State.reputation += 3;
           State.myExp += 50;
           this.log(`✅ Операция "${e.title}" завершена (после перезагрузки)`, 'success');
-          this.addSMI('positive', 'Операция завершена',
-            `Задание «${e.title}» выполнено.`,
-            'Репутация +3');
         } else {
           State.reputation -= 5;
           this.log(`❌ Операция "${e.title}" провалена (после перезагрузки)`, 'danger');
@@ -1662,13 +1649,12 @@ Object.assign(Game, {
   }
 });
 // ============================================================
-//  ПОЛКОВНИК — game.js — ЧАСТЬ 5/6
-//  Допросная, розыск, админка
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 5A/6
+//  Допросная, розыск
 // ============================================================
 
 Object.assign(Game, {
 
-  // ============ ДОПРОСНАЯ ============
   renderJail() {
     const el = document.getElementById('jail-list');
     const counter = document.getElementById('jail-count');
@@ -1759,6 +1745,7 @@ Object.assign(Game, {
     if (!willAnswer) {
       this.logInt(`😠 ${j.name}: «Молчать буду. Ничего не скажу»`, 'bad');
       this.updateJailInfo(j);
+      this.autoSave();
       return;
     }
 
@@ -1861,7 +1848,6 @@ Object.assign(Game, {
     this.autoSave();
   },
 
-  // ============ РОЗЫСК ============
   addWanted() {
     const name = document.getElementById('wanted-name').value.trim();
     const crime = document.getElementById('wanted-crime').value.trim();
@@ -2020,8 +2006,8 @@ Object.assign(Game, {
       this.log(`🚔 Задержан: ${w.name}`, 'success');
       this.toast(`${w.name} задержан`, 'success');
 
-      // В допросную
       if (!State.jail) State.jail = [];
+      if (!State.nextJailId) State.nextJailId = 1;
       State.jail.push({
         id: State.nextJailId++,
         name: w.name,
@@ -2030,7 +2016,8 @@ Object.assign(Game, {
         day: State.day,
         questions: 0
       });
-      this.log(`🚔 ${w.name} в допросной`, 'info');
+      this.log(`🚔 ${w.name} направлен в допросную`, 'info');
+      this.renderJail();
 
       this.addSMI('positive', 'Задержание преступника',
         `${w.name}, обвиняемый по статье «${w.crime}», задержан.`,
@@ -2056,16 +2043,21 @@ Object.assign(Game, {
 
     State.selectedTeam = [];
     this.renderWanted();
-    this.renderJail();
     this.renderStaff();
     this.renderGroups();
     this.renderArchive();
     this.renderSMI();
     this.updateStats();
     this.autoSave();
-  },
+  }
+});
+     // ============================================================
+//  ПОЛКОВНИК — game.js — ЧАСТЬ 5B/6
+//  Админка с ускорением времени
+// ============================================================
 
-  // ============ АДМИНКА ============
+Object.assign(Game, {
+
   openAdmin() {
     const overlay = document.createElement('div');
     overlay.className = 'admin-overlay';
@@ -2079,13 +2071,19 @@ Object.assign(Game, {
         <input type="password" id="admin-pass" placeholder="Пароль" maxlength="10">
         <div id="admin-content" style="display:none">
           <div class="a-row"><span>Режим:</span><b>Полный доступ</b></div>
+
           <p class="a-hint" style="margin-top:12px">Выдать сотрудника:</p>
           <input type="text" id="admin-name" placeholder="ФИО (пусто = случайное)">
           <select id="admin-rank"></select>
           <button class="a-btn" onclick="Game.adminAddStaff()">➕ ВЫДАТЬ СОТРУДНИКА</button>
+
           <p class="a-hint" style="margin-top:12px">Выдать деньги:</p>
           <input type="number" id="admin-money" placeholder="Сумма" value="100000">
           <button class="a-btn" onclick="Game.adminAddMoney()">💰 ВЫДАТЬ ДЕНЬГИ</button>
+
+          <p class="a-hint" style="margin-top:12px">⏩ Ускорить время (в минутах):</p>
+          <input type="number" id="admin-time" placeholder="Сколько минут" value="5" min="1" max="60">
+          <button class="a-btn" onclick="Game.adminFastForward()">⏩ ПРОМОТАТЬ ВРЕМЯ</button>
         </div>
         <div id="admin-error" class="a-error" style="display:none"></div>
         <button class="a-btn" id="admin-login-btn" onclick="Game.adminLogin()">ВОЙТИ</button>
@@ -2154,6 +2152,69 @@ Object.assign(Game, {
     this.closeAdmin();
     this.updateStats();
     this.autoSave();
+  },
+
+  adminFastForward() {
+    const minutes = parseInt(document.getElementById('admin-time').value) || 0;
+    if (minutes <= 0 || minutes > 60) return this.toast('Введите 1-60 минут', 'warn');
+
+    this.log(`⏩ [АДМИН] Ускорение времени на ${minutes} мин.`, 'info');
+    this.toast(`⏩ +${minutes} мин.`, 'success');
+    this.closeAdmin();
+
+    this.fastForward(minutes);
+  },
+
+  fastForward(minutes) {
+    let indicator = document.getElementById('ff-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'ff-indicator';
+      indicator.style.cssText = `
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        background: #d29922; color: #000; padding: 10px 20px;
+        border-radius: 8px; font-weight: 700; font-size: 14px;
+        z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,.5);
+      `;
+      document.body.appendChild(indicator);
+    }
+    indicator.textContent = `⏩ Ускорение: 0 / ${minutes} мин.`;
+    indicator.style.display = 'block';
+
+    let elapsed = 0;
+    const totalMs = minutes * 60000;
+    const step = 3000;
+
+    const timer = setInterval(() => {
+      elapsed += step;
+      const virtualMinutes = Math.floor(elapsed / 6000);
+      indicator.textContent = `⏩ Ускорение: ${Math.min(virtualMinutes, minutes)} / ${minutes} мин.`;
+
+      if (chance(0.4)) this.generateEvent();
+      if (chance(0.3) && State.candidates.length < 8) {
+        this.generateCandidate();
+        this.generateCandidate();
+      }
+      if (chance(0.2) && !State.bribe && State.staff.length > 0) {
+        this.generateBribe();
+      }
+
+      State.staff.forEach(s => {
+        s.fatigue = Math.max(0, s.fatigue - 3);
+      });
+
+      if (elapsed >= totalMs) {
+        clearInterval(timer);
+        indicator.textContent = `✅ Ускорено на ${minutes} мин.`;
+        setTimeout(() => { indicator.style.display = 'none'; }, 2000);
+
+        this.log(`⏩ Ускорение завершено (${minutes} мин.)`, 'success');
+        this.renderStaff();
+        this.renderEvents();
+        this.renderCandidates();
+        this.autoSave();
+      }
+    }, step);
   },
 
   closeAdmin() {
